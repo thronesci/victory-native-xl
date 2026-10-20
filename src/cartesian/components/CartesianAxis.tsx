@@ -218,9 +218,7 @@ export const CartesianAxis = <
   });
 
   const boundingFrame = React.useMemo(() => {
-    const framePath = Skia.Path.Make();
-
-    framePath.addRect(
+    return Skia.Path.Rect(
       Skia.XYWHRect(
         xScale(x1),
         yScale(y1),
@@ -228,7 +226,6 @@ export const CartesianAxis = <
         yScale(y2) - yScale(y1),
       ),
     );
-    return framePath;
   }, [x1, x2, xScale, y1, y2, yScale]);
 
   return (
