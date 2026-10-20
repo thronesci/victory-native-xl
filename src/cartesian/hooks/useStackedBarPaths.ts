@@ -96,7 +96,7 @@ export const useStackedBarPaths = ({
         });
         const { roundedCorners, color, ...ops } = options;
 
-        const path = Skia.Path.Make();
+        const builder = Skia.PathBuilder.Make();
         const barHeight = yScale(0) - y;
 
         const offset = isPositive
@@ -112,9 +112,9 @@ export const useStackedBarPaths = ({
             roundedCorners,
             Number(yValue),
           );
-          path.addRRect(nonUniformRoundedRect);
+          builder.addRRect(nonUniformRoundedRect);
         } else {
-          path.addRect(
+          builder.addRect(
             Skia.XYWHRect(
               point.x - barWidth / 2,
               y - (offset ?? 0),
@@ -133,7 +133,7 @@ export const useStackedBarPaths = ({
         }
 
         const bar = {
-          path,
+          path: builder.build(),
           key: `${i}-${j}`,
           color: color ?? colors[i],
           ...ops,

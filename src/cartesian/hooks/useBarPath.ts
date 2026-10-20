@@ -26,7 +26,7 @@ export const useBarPath = (
   });
 
   const path = React.useMemo(() => {
-    const path = Skia.Path.Make();
+    const builder = Skia.PathBuilder.Make();
 
     points.forEach(({ x, y, yValue }) => {
       if (typeof y !== "number") return;
@@ -42,13 +42,13 @@ export const useBarPath = (
           roundedCorners,
           Number(yValue),
         );
-        path.addRRect(nonUniformRoundedRect);
+        builder.addRRect(nonUniformRoundedRect);
       } else {
-        path.addRect(Skia.XYWHRect(x - barWidth / 2, y, barWidth, barHeight));
+        builder.addRect(Skia.XYWHRect(x - barWidth / 2, y, barWidth, barHeight));
       }
     });
 
-    return path;
+    return builder.build();
   }, [barWidth, points, roundedCorners, yScale]);
 
   return { path, barWidth };
