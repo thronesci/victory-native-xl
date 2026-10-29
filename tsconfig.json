@@ -25,6 +25,5 @@
     "target": "esnext",
     "verbatimModuleSyntax": true
   },
-  "exclude": ["website"],
-  "extends": "expo/tsconfig.base"
+  "exclude": ["website"]
 }
