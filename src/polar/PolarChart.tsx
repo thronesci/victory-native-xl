@@ -61,7 +61,7 @@ const PolarChartBase = (
     );
   }
 
-  const { ref, size } = useCanvasSize();
+  const { size, onLayout: onCanvasLayout } = useCanvasSize();
   React.useEffect(() => {
     if (size.height > 0 && size.width > 0) {
       onLayout(size);
@@ -72,7 +72,7 @@ const PolarChartBase = (
     <View style={[styles.baseContainer, containerStyle]}>
       <GestureHandlerRootView style={{ flex: 1, overflow: "hidden" }}>
         <Canvas
-          ref={ref}
+          onLayout={onCanvasLayout}
           style={StyleSheet.flatten([
             styles.canvasContainer,
             hasMeasuredLayoutSize ? { width, height } : null,
