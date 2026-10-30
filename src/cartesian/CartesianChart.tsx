@@ -169,7 +169,7 @@ function CartesianChartContent<
   );
 
   // new arch
-  const { ref, size } = useCanvasSize();
+  const { size, onLayout } = useCanvasSize();
   const [hasMeasuredLayoutSize, setHasMeasuredLayoutSize] =
     React.useState(false);
 
@@ -647,7 +647,7 @@ function CartesianChartContent<
 
   // Body of the chart.
   const body = (
-    <Canvas style={{ flex: 1 }} ref={ref}>
+    <Canvas style={{ flex: 1 }} onLayout={onLayout}>
       {YAxisComponents}
       {XAxisComponents}
       {FrameComponent}

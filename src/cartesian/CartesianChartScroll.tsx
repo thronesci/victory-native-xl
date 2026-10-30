@@ -191,7 +191,7 @@ function CartesianChartContent<
   maxScrollOffset = 50,
 }: CartesianChartProps<RawData, XK, YK>) {
   const chartBoundsRef = React.useRef<ChartBounds | undefined>(undefined);
-  const { ref, size } = useCanvasSize();
+  const { size, onLayout } = useCanvasSize();
   const [hasMeasuredLayoutSize, setHasMeasuredLayoutSize] =
     React.useState(false);
 
@@ -579,7 +579,7 @@ function CartesianChartContent<
 
   return (
     <GestureHandlerRootView style={{ flex: 1, overflow: "hidden" }}>
-      <Canvas style={{ flex: 1 }} ref={ref}>
+      <Canvas style={{ flex: 1 }} onLayout={onLayout}>
         {FrameComponent}
         <ChartAxis
           primaryYScale={primaryYScale}
