@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Group } from "@shopify/react-native-skia";
+import { Group } from "react-native-skia";
 import type { ScaleLinear } from "d3-scale";
 import isEqual from "react-fast-compare";
 import { useFunctionRef } from "../hooks/useFunctionRef";

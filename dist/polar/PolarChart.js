@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PolarChart = void 0;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_native_1 = require("react-native");
 const react_native_gesture_handler_1 = require("react-native-gesture-handler");
 const its_fine_1 = require("its-fine");

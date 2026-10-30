@@ -3,7 +3,7 @@ import {
   GestureDetector,
   type GestureType,
 } from "react-native-gesture-handler";
-import type { SkRect } from "@shopify/react-native-skia";
+import type { SkRect } from "react-native-skia";
 import Animated, {
   useAnimatedStyle,
   type SharedValue,

@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.useStackedAreaPaths = void 0;
 const React = __importStar(require("react"));
 const d3_shape_1 = require("d3-shape");
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const stitchDataArray_1 = require("../../utils/stitchDataArray");
 const curves_1 = require("../utils/curves");
 const groupPointsArray_1 = require("../../utils/groupPointsArray");

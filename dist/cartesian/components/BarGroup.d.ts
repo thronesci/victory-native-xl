@@ -1,5 +1,5 @@
 import * as React from "react";
-import { type PathProps, type SkPath } from "@shopify/react-native-skia";
+import { type PathProps, type SkPath } from "react-native-skia";
 import type { ChartBounds, PointsArray } from "../../types";
 import type { PathAnimationConfig } from "../../hooks/useAnimatedPath";
 import type { RoundedCorners } from "../../utils/createRoundedRectPath";
@@ -30,9 +30,9 @@ type BarGroupBarProps = {
 } & Partial<Pick<PathProps, "color">>;
 declare function BarGroupBar(props: React.PropsWithChildren<BarGroupBarProps>): React.FunctionComponentElement<{
     path: SkPath;
-} & Omit<import("@shopify/react-native-skia").AnimatedProps<PathProps, never>, "start" | "end"> & {
-    start?: import("@shopify/react-native-skia").AnimatedProp<number> | undefined;
-    end?: import("@shopify/react-native-skia").AnimatedProp<number> | undefined;
+} & Omit<import("react-native-skia").AnimatedProps<PathProps, never>, "start" | "end"> & {
+    start?: import("react-native-skia").AnimatedProp<number> | undefined;
+    end?: import("react-native-skia").AnimatedProp<number> | undefined;
 } & {
     animate?: PathAnimationConfig;
 }>;

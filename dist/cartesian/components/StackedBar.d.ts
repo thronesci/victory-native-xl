@@ -1,5 +1,5 @@
 import * as React from "react";
-import { type Color, type PathProps } from "@shopify/react-native-skia";
+import { type Color, type PathProps } from "react-native-skia";
 import type { PropsWithChildren } from "react";
 import type { ChartBounds, PointsArray } from "../../types";
 import { type PathAnimationConfig } from "../../hooks/useAnimatedPath";
@@ -23,10 +23,10 @@ type CartesianStackedBarProps = {
     };
 };
 export declare const StackedBar: ({ points, chartBounds, animate, innerPadding, barWidth, barCount, barOptions, colors, }: PropsWithChildren<CartesianStackedBarProps>) => React.FunctionComponentElement<{
-    path: import("@shopify/react-native-skia").SkPath;
-} & Omit<import("@shopify/react-native-skia").AnimatedProps<PathProps, never>, "start" | "end"> & {
-    start?: import("@shopify/react-native-skia").AnimatedProp<number> | undefined;
-    end?: import("@shopify/react-native-skia").AnimatedProp<number> | undefined;
+    path: import("react-native-skia").SkPath;
+} & Omit<import("react-native-skia").AnimatedProps<PathProps, never>, "start" | "end"> & {
+    start?: import("react-native-skia").AnimatedProp<number> | undefined;
+    end?: import("react-native-skia").AnimatedProp<number> | undefined;
 } & {
     animate?: PathAnimationConfig;
 }>[];

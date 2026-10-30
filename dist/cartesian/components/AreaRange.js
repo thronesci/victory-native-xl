@@ -46,7 +46,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AreaRange = AreaRange;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const useAreaPath_1 = require("../hooks/useAreaPath");
 const AnimatedPath_1 = require("./AnimatedPath");
 function AreaRange(_a) {

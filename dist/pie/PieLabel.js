@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_1 = __importDefault(require("react"));
 const PieSliceContext_1 = require("./contexts/PieSliceContext");
 const getFontGlyphWidth_1 = require("../utils/getFontGlyphWidth");

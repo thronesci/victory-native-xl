@@ -6,7 +6,7 @@ import {
   type ClipDef,
   Group,
   useCanvasSize,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import {
   type SharedValue,
   useDerivedValue,

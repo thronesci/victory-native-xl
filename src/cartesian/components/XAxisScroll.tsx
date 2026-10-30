@@ -8,7 +8,7 @@ import {
   vec,
   type SkFont as Font,
   type SkPoint,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 
 import { boundsToClip } from "../../utils/boundsToClip";
 import { DEFAULT_TICK_COUNT, downsampleTicks } from "../../utils/tickHelpers";
