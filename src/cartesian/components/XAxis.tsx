@@ -6,7 +6,7 @@ import {
   Text,
   vec,
   type SkPoint,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import { getOffsetFromAngle } from "../../utils/getOffsetFromAngle";
 import { boundsToClip } from "../../utils/boundsToClip";
 import { DEFAULT_TICK_COUNT, downsampleTicks } from "../../utils/tickHelpers";

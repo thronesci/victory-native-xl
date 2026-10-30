@@ -5,5 +5,5 @@ export type LinePathOptions = {
     connectMissingData?: boolean;
 };
 export declare const useLinePath: (points: PointsArray, { curveType, connectMissingData }?: LinePathOptions) => {
-    path: import("@shopify/react-native-skia").SkPath;
+    path: import("react-native-skia").SkPath;
 };

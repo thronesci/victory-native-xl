@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.useAnimatedPath = void 0;
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const React = __importStar(require("react"));
 const react_native_reanimated_1 = require("react-native-reanimated");
 function isWithDecayConfig(config) {

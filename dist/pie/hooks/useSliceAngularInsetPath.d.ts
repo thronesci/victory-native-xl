@@ -4,5 +4,5 @@ type SliceAngularInsetPathArgs = {
     slice: PieSliceData;
     angularInset: PieSliceAngularInsetData;
 };
-export declare const useSliceAngularInsetPath: ({ angularInset, slice, }: SliceAngularInsetPathArgs) => readonly [import("@shopify/react-native-skia").SkPath, import("@shopify/react-native-skia").SkPaint];
+export declare const useSliceAngularInsetPath: ({ angularInset, slice, }: SliceAngularInsetPathArgs) => readonly [import("react-native-skia").SkPath, import("react-native-skia").SkPaint];
 export {};

@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.YAxisDefaults = exports.YAxis = void 0;
 const react_1 = __importDefault(require("react"));
 const react_native_1 = require("react-native");
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const boundsToClip_1 = require("../../utils/boundsToClip");
 const YAxis = ({ xScale, yScale, yTicksNormalized, axisSide, labelPosition, labelOffset, labelCenterOffset, labelColor, lineWidth, lineColor, font, formatYLabel = (label) => String(label), linePathEffect, chartBounds, }) => {
     var _a;

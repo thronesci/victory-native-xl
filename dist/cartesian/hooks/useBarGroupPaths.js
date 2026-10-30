@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.useBarGroupPaths = void 0;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const createRoundedRectPath_1 = require("../../utils/createRoundedRectPath");
 const CartesianChartContext_1 = require("../contexts/CartesianChartContext");
 const useBarGroupPaths = (points, chartBounds, betweenGroupPadding = 0, withinGroupPadding = 0, roundedCorners, customBarWidth, barCount) => {

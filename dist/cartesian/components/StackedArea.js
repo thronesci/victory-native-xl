@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StackedArea = StackedArea;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const AnimatedPath_1 = require("./AnimatedPath");
 const useStackedAreaPaths_1 = require("../hooks/useStackedAreaPaths");
 const DEFAULT_COLORS = ["red", "orange", "yellow", "green", "blue", "purple"];
