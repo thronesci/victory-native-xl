@@ -1,5 +1,5 @@
 import React from "react";
-import { type Color, type PathProps, type SkPoint } from "@shopify/react-native-skia";
+import { type Color, type PathProps, type SkPoint } from "react-native-skia";
 import type { PieLabelProps } from "./PieLabel";
 import type { PathAnimationConfig } from "../hooks/useAnimatedPath";
 export type PieSliceData = {

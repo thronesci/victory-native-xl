@@ -1,5 +1,5 @@
 import React from "react";
-import { type Color, type PathProps, type SkPath } from "@shopify/react-native-skia";
+import { type Color, type PathProps, type SkPath } from "react-native-skia";
 import { type RoundedCorners } from "../../utils/createRoundedRectPath";
 import type { ChartBounds, PointsArray } from "../../types";
 type CustomizablePathProps = Partial<Pick<PathProps, "color" | "blendMode" | "opacity" | "antiAlias">>;

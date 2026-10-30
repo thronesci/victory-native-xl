@@ -1,4 +1,4 @@
-import type { NonUniformRRect } from "@shopify/react-native-skia";
+import type { NonUniformRRect } from "react-native-skia";
 export type RoundedCorners = {
     topLeft?: number;
     topRight?: number;

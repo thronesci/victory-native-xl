@@ -1,4 +1,4 @@
-import { type SkPath } from "@shopify/react-native-skia";
+import { type SkPath } from "react-native-skia";
 import { type WithDecayConfig, type WithSpringConfig, type WithTimingConfig } from "react-native-reanimated";
 export type PathAnimationConfig = ({
     type: "timing";

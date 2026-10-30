@@ -5,5 +5,5 @@ export type AreaPathOptions = {
     connectMissingData?: boolean;
 };
 export declare const useAreaPath: (points: PointsArray, y0: number, { curveType, connectMissingData }?: AreaPathOptions) => {
-    path: import("@shopify/react-native-skia").SkPath;
+    path: import("react-native-skia").SkPath;
 };

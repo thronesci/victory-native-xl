@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CartesianAxisDefaultProps = exports.CartesianAxis = void 0;
 const react_1 = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_native_1 = require("react-native");
 const getFontGlyphWidth_1 = require("../../utils/getFontGlyphWidth");
 const tickHelpers_1 = require("../../utils/tickHelpers");

@@ -1,5 +1,5 @@
 import React from "react";
-import { type Color, type SkFont } from "@shopify/react-native-skia";
+import { type Color, type SkFont } from "react-native-skia";
 import type { ChartBounds, PointsArray } from "../../types";
 export type BarLabelConfig = {
     position: "top" | "bottom" | "left" | "right";

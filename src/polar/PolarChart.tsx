@@ -4,7 +4,7 @@ import {
   Group,
   SkSize,
   useCanvasSize,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import {
   StyleSheet,
   View,

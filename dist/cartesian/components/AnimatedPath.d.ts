@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { PathProps, SkPath, SkiaDefaultProps } from "@shopify/react-native-skia";
+import type { PathProps, SkPath, SkiaDefaultProps } from "react-native-skia";
 import { type PathAnimationConfig } from "../../hooks/useAnimatedPath";
 type AnimatedPathProps = {
     path: SkPath;

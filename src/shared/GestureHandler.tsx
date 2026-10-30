@@ -9,7 +9,7 @@ import {
   // convertToColumnMajor,
   // type Matrix4,
   type SkRect,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import Animated, {
   useAnimatedStyle,
   useDerivedValue,

@@ -1,4 +1,4 @@
-import { Matrix4 } from "@shopify/react-native-skia";
+import { Matrix4 } from "react-native-skia";
 export declare const identity4: Matrix4;
 export declare const getTransformComponents: (m: Matrix4 | undefined) => {
     scaleX: number;

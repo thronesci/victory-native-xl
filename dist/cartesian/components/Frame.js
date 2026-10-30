@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FrameDefaults = exports.Frame = void 0;
 const react_1 = __importDefault(require("react"));
 const react_native_1 = require("react-native");
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const Frame = ({ xScale, yScale, lineColor, lineWidth, linePathEffect, }) => {
     const [x1 = 0, x2 = 0] = xScale.domain();
     const [y1 = 0, y2 = 0] = yScale.domain();

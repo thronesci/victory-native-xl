@@ -1,5 +1,5 @@
 import { type SharedValue } from "react-native-reanimated";
-import { type Matrix4 } from "@shopify/react-native-skia";
+import { type Matrix4 } from "react-native-skia";
 export type ChartTransformState = {
     panActive: SharedValue<boolean>;
     zoomActive: SharedValue<boolean>;

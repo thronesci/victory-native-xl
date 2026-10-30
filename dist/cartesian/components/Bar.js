@@ -46,7 +46,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Bar = void 0;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const AnimatedPath_1 = require("./AnimatedPath");
 const useBarPath_1 = require("../hooks/useBarPath");
 const BarGraphLabels_1 = require("./BarGraphLabels");

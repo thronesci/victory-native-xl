@@ -16,7 +16,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PieSlice = void 0;
 const react_1 = __importDefault(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const useSlicePath_1 = require("./hooks/useSlicePath");
 const PieSliceContext_1 = require("./contexts/PieSliceContext");
 const PieLabel_1 = __importDefault(require("./PieLabel"));

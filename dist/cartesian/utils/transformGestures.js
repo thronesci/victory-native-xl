@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scrollTransformGesture = exports.panTransformGesture = exports.pinchTransformGesture = void 0;
 const react_native_gesture_handler_1 = require("react-native-gesture-handler");
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_native_reanimated_1 = require("react-native-reanimated");
 const pinchTransformGesture = (state, _config = {}) => {
     const defaults = {

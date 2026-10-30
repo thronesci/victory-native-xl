@@ -1,6 +1,6 @@
 import * as React from "react";
 import { type LayoutChangeEvent } from "react-native";
-import { Canvas, Group, useCanvasSize } from "@shopify/react-native-skia";
+import { Canvas, Group, useCanvasSize } from "react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import {
   type ComposedGesture,

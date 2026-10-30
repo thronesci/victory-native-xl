@@ -49,7 +49,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CartesianChart = CartesianChart;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_native_reanimated_1 = require("react-native-reanimated");
 const react_native_gesture_handler_1 = require("react-native-gesture-handler");
 const d3_zoom_1 = require("d3-zoom");
