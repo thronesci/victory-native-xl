@@ -70,6 +70,8 @@ export type CartesianChartRenderArg<RawData extends Record<string, unknown>, YK 
         [K in YK]: PointsArray;
     };
     scrollX?: SharedValue<number>;
+    /** True from a user scroll's first pan frame until its fling or spring-back comes to rest. Scroll charts only. */
+    isScrolling?: SharedValue<boolean>;
 };
 export type Scale = ScaleLinear<number, number>;
 export type YAxisDomain = [number] | [number, number] | null;

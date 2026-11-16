@@ -53,6 +53,12 @@ type CartesianChartProps<RawData extends Record<string, unknown>, XK extends key
     };
     customGestures?: ComposedGesture;
     onScroll?: (data: any) => void;
+    /**
+     * Called once when a user scroll comes to rest, with the x values at the plot's left and right edges. Not called
+     * for `scrollTo`/`scrollToEnd`, or for a scroll whose fling another scroll interrupts. A scroll reports to the
+     * `onScrollEnd` passed when its finger lifted, so a caller can tell a report from before a later change.
+     */
+    onScrollEnd?: (visibleXDomain: [number, number]) => void;
     scrollState?: boolean;
     actionsRef?: MutableRefObject<CartesianActionsHandle<ChartPressState<{
         x: InputFields<RawData>[XK];
