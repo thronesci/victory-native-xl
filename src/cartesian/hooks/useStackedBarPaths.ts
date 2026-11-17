@@ -4,7 +4,7 @@ import {
   type Color,
   type PathProps,
   type SkPath,
-} from "react-native-skia";
+} from "@shopify/react-native-skia";
 import {
   createRoundedRectPath,
   type RoundedCorners,

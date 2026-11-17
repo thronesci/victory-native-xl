@@ -6,7 +6,7 @@ import {
   type ClipDef,
   Group,
   useCanvasSize,
-} from "react-native-skia";
+} from "@shopify/react-native-skia";
 import {
   type SharedValue,
   useDerivedValue,
@@ -184,7 +184,7 @@ function CartesianChartContent<
   maxScrollOffset = 50,
 }: CartesianChartProps<RawData, XK, YK>) {
   const chartBoundsRef = React.useRef<ChartBounds | undefined>(undefined);
-  const { size, onLayout } = useCanvasSize();
+  const { ref, size } = useCanvasSize();
   const [hasMeasuredLayoutSize, setHasMeasuredLayoutSize] =
     React.useState(false);
 
@@ -547,7 +547,7 @@ function CartesianChartContent<
 
   return (
     <GestureHandlerRootView style={{ flex: 1, overflow: "hidden" }}>
-      <Canvas style={{ flex: 1 }} onLayout={onLayout}>
+      <Canvas style={{ flex: 1 }} ref={ref}>
         {FrameComponent}
         <ChartAxis
           primaryYScale={primaryYScale}
