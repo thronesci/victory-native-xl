@@ -121,6 +121,12 @@ type CartesianChartProps<
   };
   customGestures?: ComposedGesture;
   onScroll?: (data: any) => void;
+  /**
+   * Called once when a user scroll comes to rest, with the x values at the plot's left and right edges. Not called
+   * for `scrollTo`/`scrollToEnd`, or for a scroll whose fling another scroll interrupts. A scroll reports to the
+   * `onScrollEnd` passed when its finger lifted, so a caller can tell a report from before a later change.
+   */
+  onScrollEnd?: (visibleXDomain: [number, number]) => void;
   scrollState?: boolean;
   actionsRef?: MutableRefObject<CartesianActionsHandle<
     | ChartPressState<{
@@ -179,6 +185,7 @@ function CartesianChartContent<
   viewport,
   scrollState,
   onScroll,
+  onScrollEnd,
   onVisibleTicksChange,
   scrollControllerRef,
   maxScrollOffset = 50,
@@ -476,6 +483,26 @@ function CartesianChartContent<
       />
     ) : null;
 
+  // A fling can outlast the render that started it, so its end reads the latest geometry.
+  const scrollEndGeometry = React.useRef({ dimensions, size, xScale, chartBounds });
+  React.useLayoutEffect(() => {
+    scrollEndGeometry.current = { dimensions, size, xScale, chartBounds };
+  }, [dimensions, size, xScale, chartBounds]);
+  const handleScrollEnd = React.useMemo(() => {
+    if (!onScrollEnd) return undefined;
+    return (finalScrollX: number) => {
+      const { dimensions, size, xScale, chartBounds } =
+        scrollEndGeometry.current;
+      // `scrollXDerived` at rest: a point's x plus it is where the point is drawn.
+      const offset =
+        finalScrollX - (dimensions.totalContentWidth || 0) + size.width;
+      onScrollEnd([
+        xScale.invert(chartBounds.left - offset),
+        xScale.invert(chartBounds.right - offset),
+      ]);
+    };
+  }, [onScrollEnd]);
+
   // Memoize the composed gesture
   const composedGesture = React.useMemo(() => {
     let composed = customGestures ?? Gesture.Race();
@@ -488,6 +515,7 @@ function CartesianChartContent<
           viewportWidth: size.width,
           dimensions,
           onScroll,
+          onScrollEnd: handleScrollEnd,
           maxScrollOffset,
           isScrolling,
         }),
@@ -502,6 +530,9 @@ function CartesianChartContent<
     prevTranslateX,
     scrollX,
     onScroll,
+    handleScrollEnd,
+    maxScrollOffset,
+    isScrolling,
   ]);
 
   const scrollXDerived = useDerivedValue(() => {
@@ -543,6 +574,7 @@ function CartesianChartContent<
     canvasSize: size,
     points,
     scrollX: scrollXDerived,
+    isScrolling,
   };
 
   return (

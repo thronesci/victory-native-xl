@@ -25,6 +25,13 @@ export function useCartesianScrollHandler({
   // Refs to track previous state for scroll-to-end logic
   const prevViewportXRef = useRef<[number, number] | null>(viewport?.x || null);
   const totalContentWidth = dimensions.totalContentWidth;
+  // A programmatic scroll is not a user scroll. Clearing `isScrolling` first keeps the jump out of anything that
+  // follows user scrolls; moving `scrollX` cancels a running fling, which then doesn't report a scroll end.
+  const jumpTo = (x: number) => {
+    isScrolling.value = false;
+    scrollX.value = x;
+    prevTranslateX.value = x;
+  };
 
   useEffect(() => {
     // Since scroll view is reversed, "end" is at maxScrollOffset (not maxScroll)
@@ -41,8 +48,7 @@ export function useCartesianScrollHandler({
     }
 
     if (shouldScrollToEnd) {
-      scrollX.value = scrollToEndPosition;
-      prevTranslateX.value = scrollToEndPosition;
+      jumpTo(scrollToEndPosition);
     }
 
     // Update tracking refs
@@ -52,6 +58,7 @@ export function useCartesianScrollHandler({
     viewport?.x,
     prevTranslateX,
     scrollX,
+    isScrolling,
     totalContentWidth,
   ]);
 
@@ -77,18 +84,15 @@ export function useCartesianScrollHandler({
           Math.min(rawScroll, maxScroll),
         );
 
-        scrollX.value = clampedX;
-        prevTranslateX.value = clampedX;
+        jumpTo(clampedX);
       },
       scrollToEnd: () => {
-        const endScroll = maxScrollOffset ? -maxScrollOffset : 0;
-        scrollX.value = endScroll;
-        prevTranslateX.value = endScroll;
+        jumpTo(maxScrollOffset ? -maxScrollOffset : 0);
       },
       getScrollX() {
         return scrollX.value;
       },
     }),
-    [xScale, dimensions, scrollX, prevTranslateX, maxScrollOffset],
+    [xScale, dimensions, scrollX, prevTranslateX, isScrolling, maxScrollOffset],
   );
 }

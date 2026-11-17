@@ -121,6 +121,7 @@ export const scrollTransformGesture = ({
   viewportWidth,
   dimensions,
   onScroll,
+  onScrollEnd,
   maxScrollOffset,
   isScrolling,
 }: {
@@ -129,10 +130,18 @@ export const scrollTransformGesture = ({
   viewportWidth: number;
   dimensions: Partial<{ totalContentWidth: number; width: number }>;
   onScroll?: (data: any) => void;
+  /** Called on JS with the final `scrollX` once a user scroll's fling or spring-back comes to rest. */
+  onScrollEnd?: (scrollX: number) => void;
   maxScrollOffset?: number;
   isScrolling: SharedValue<boolean>;
 }): PanGesture => {
   const newZero = maxScrollOffset ? maxScrollOffset : 48; // 48 is the max scroll offset - give cushion
+  // A cancelled animation (by the next pan, or a programmatic scroll) is not the end of this scroll.
+  const endScroll = (finished?: boolean) => {
+    "worklet";
+    isScrolling.value = false;
+    if (finished && onScrollEnd) runOnJS(onScrollEnd)(scrollX.value);
+  };
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onStart(() => {
@@ -185,23 +194,16 @@ export const scrollTransformGesture = ({
       const currentScroll = scrollX.value;
 
       if (currentScroll < minScroll) {
-        scrollX.value = withSpring(minScroll, springConfig, () => {
-          isScrolling.value = false;
-        });
+        scrollX.value = withSpring(minScroll, springConfig, endScroll);
       } else if (currentScroll > maxScroll) {
-        scrollX.value = withSpring(maxScroll, springConfig, () => {
-          isScrolling.value = false;
-        });
-        isScrolling.value = false;
+        scrollX.value = withSpring(maxScroll, springConfig, endScroll);
       } else {
         scrollX.value = withDecay(
           {
             velocity: e.velocityX,
             clamp: [minScroll, maxScroll],
           },
-          () => {
-            isScrolling.value = false;
-          },
+          endScroll,
         );
       }
     });
