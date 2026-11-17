@@ -3,8 +3,8 @@ import type {
   PathProps,
   SkPath,
   SkiaDefaultProps,
-} from "react-native-skia";
-import { Path } from "react-native-skia";
+} from "@shopify/react-native-skia";
+import { Path } from "@shopify/react-native-skia";
 import {
   isSharedValue,
   makeMutable,

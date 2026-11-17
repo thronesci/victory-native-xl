@@ -4,7 +4,7 @@ import {
   Group,
   SkSize,
   useCanvasSize,
-} from "react-native-skia";
+} from "@shopify/react-native-skia";
 import {
   StyleSheet,
   View,
@@ -61,7 +61,7 @@ const PolarChartBase = (
     );
   }
 
-  const { size, onLayout: onCanvasLayout } = useCanvasSize();
+  const { ref, size } = useCanvasSize();
   React.useEffect(() => {
     if (size.height > 0 && size.width > 0) {
       onLayout(size);
@@ -72,7 +72,7 @@ const PolarChartBase = (
     <View style={[styles.baseContainer, containerStyle]}>
       <GestureHandlerRootView style={{ flex: 1, overflow: "hidden" }}>
         <Canvas
-          onLayout={onCanvasLayout}
+          ref={ref}
           style={StyleSheet.flatten([
             styles.canvasContainer,
             hasMeasuredLayoutSize ? { width, height } : null,

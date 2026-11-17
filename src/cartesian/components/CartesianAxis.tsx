@@ -6,7 +6,7 @@ import {
   Text,
   vec,
   type Color,
-} from "react-native-skia";
+} from "@shopify/react-native-skia";
 import { StyleSheet } from "react-native";
 import { getFontGlyphWidth } from "../../utils/getFontGlyphWidth";
 import type {
