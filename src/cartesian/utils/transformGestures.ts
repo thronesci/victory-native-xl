@@ -129,6 +129,20 @@ export const getScrollBounds = (
   return [-(maxScrollOffset || 48), Math.max(0, width - viewportWidth)];
 };
 
+/**
+ * Where a resting scroll moves when the scroll bounds change: to the new edge of a side that contracted past it.
+ * Otherwise it stays, including a `scrollTo` offset that already sat past an edge that didn't move.
+ */
+export const getContractedScroll = (
+  scrollX: number,
+  [prevMinScroll, prevMaxScroll]: [number, number],
+  [minScroll, maxScroll]: [number, number],
+): number | undefined => {
+  if (maxScroll < prevMaxScroll && scrollX > maxScroll) return maxScroll;
+  if (minScroll > prevMinScroll && scrollX < minScroll) return minScroll;
+  return undefined;
+};
+
 export const scrollTransformGesture = ({
   scrollX,
   prevTranslateX,

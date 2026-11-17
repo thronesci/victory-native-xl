@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SharedValue } from "react-native-reanimated";
-import { getContractedScroll } from "./useCartesianScrollHandler";
 import {
+  getContractedScroll,
   getScrollBounds,
   scrollTransformGesture,
 } from "./utils/transformGestures";
@@ -122,14 +122,16 @@ describe("scrollTransformGesture", () => {
     expect(isScrolling.value).toBe(true);
 
     settle(springBack, -20);
-    expect(onScrollEnd).toHaveBeenCalledExactlyOnceWith(-20);
+    expect(onScrollEnd).toHaveBeenCalledTimes(1);
+    expect(onScrollEnd).toHaveBeenCalledWith(-20);
     expect(isScrolling.value).toBe(false);
   });
 
   it("reports a fling that rests inside the bounds where it rests", () => {
     const { onScrollEnd, decay, settle } = fling([-80, 600]);
     expect(settle(decay, -30)).toBe(-30);
-    expect(onScrollEnd).toHaveBeenCalledExactlyOnceWith(-30);
+    expect(onScrollEnd).toHaveBeenCalledTimes(1);
+    expect(onScrollEnd).toHaveBeenCalledWith(-30);
   });
 
   it("doesn't report a cancelled fling", () => {

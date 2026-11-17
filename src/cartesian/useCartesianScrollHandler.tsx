@@ -1,6 +1,9 @@
 import { useRef, useEffect, useImperativeHandle } from "react";
 import { useSharedValue, type SharedValue } from "react-native-reanimated";
-import { getScrollBounds } from "./utils/transformGestures";
+import {
+  getContractedScroll,
+  getScrollBounds,
+} from "./utils/transformGestures";
 
 export function useCartesianScrollHandler({
   data,
@@ -94,18 +97,4 @@ export function useCartesianScrollHandler({
   );
 
   return scrollBounds;
-}
-
-/**
- * Where a resting scroll moves when the scroll bounds change: to the new edge of a side that contracted past it.
- * Otherwise it stays, including a `scrollTo` offset that already sat past an edge that didn't move.
- */
-export function getContractedScroll(
-  scrollX: number,
-  [prevMinScroll, prevMaxScroll]: [number, number],
-  [minScroll, maxScroll]: [number, number],
-): number | undefined {
-  if (maxScroll < prevMaxScroll && scrollX > maxScroll) return maxScroll;
-  if (minScroll > prevMinScroll && scrollX < minScroll) return minScroll;
-  return undefined;
 }
