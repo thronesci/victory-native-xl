@@ -310,7 +310,7 @@ function CartesianChartContent<
   const scrollX = useSharedValue(maxScrollOffset ? -maxScrollOffset : 0);
   const isScrolling = useSharedValue(false);
   const prevTranslateX = useSharedValue(0);
-  useCartesianScrollHandler({
+  const scrollBounds = useCartesianScrollHandler({
     data,
     dimensions,
     scrollX,
@@ -515,7 +515,7 @@ function CartesianChartContent<
           dimensions,
           onScroll,
           onScrollEnd: handleScrollEnd,
-          maxScrollOffset,
+          scrollBounds,
           isScrolling,
         }),
       );
@@ -530,7 +530,7 @@ function CartesianChartContent<
     scrollX,
     onScroll,
     handleScrollEnd,
-    maxScrollOffset,
+    scrollBounds,
     isScrolling,
   ]);
 

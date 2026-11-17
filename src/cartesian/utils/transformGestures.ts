@@ -115,6 +115,20 @@ const springConfig = {
 
 const DEFAULT_VIEWPORT_WIDTH = 300;
 
+/**
+ * Where a user scroll can rest, `[newest end, oldest start]`. The scroll is reversed, so the end is negative and the
+ * start positive.
+ */
+export const getScrollBounds = (
+  dimensions: Partial<{ totalContentWidth: number; width: number }>,
+  maxScrollOffset?: number,
+): [number, number] => {
+  const viewportWidth = dimensions.width || DEFAULT_VIEWPORT_WIDTH;
+  const width = dimensions.totalContentWidth || DEFAULT_VIEWPORT_WIDTH;
+  // 48 is the max scroll offset - give cushion
+  return [-(maxScrollOffset || 48), Math.max(0, width - viewportWidth)];
+};
+
 export const scrollTransformGesture = ({
   scrollX,
   prevTranslateX,
@@ -122,7 +136,7 @@ export const scrollTransformGesture = ({
   dimensions,
   onScroll,
   onScrollEnd,
-  maxScrollOffset,
+  scrollBounds,
   isScrolling,
 }: {
   scrollX: SharedValue<number>;
@@ -132,15 +146,30 @@ export const scrollTransformGesture = ({
   onScroll?: (data: any) => void;
   /** Called on JS with the final `scrollX` once a user scroll's fling or spring-back comes to rest. */
   onScrollEnd?: (scrollX: number) => void;
-  maxScrollOffset?: number;
+  /** The current `getScrollBounds`. A fling outlives the render that started it, so it reads them as it settles. */
+  scrollBounds: SharedValue<[number, number]>;
   isScrolling: SharedValue<boolean>;
 }): PanGesture => {
-  const newZero = maxScrollOffset ? maxScrollOffset : 48; // 48 is the max scroll offset - give cushion
   // A cancelled animation (by the next pan, or a programmatic scroll) is not the end of this scroll.
-  const endScroll = (finished?: boolean) => {
+  const reportScrollEnd = (finished?: boolean) => {
     "worklet";
     isScrolling.value = false;
     if (finished && onScrollEnd) runOnJS(onScrollEnd)(scrollX.value);
+  };
+  const endScroll = (finished?: boolean) => {
+    "worklet";
+    // The bounds can contract while a fling settles (shorter data, a smaller `maxScrollOffset`), so it returns into
+    // them before reporting where it rests.
+    const [minScroll, maxScroll] = scrollBounds.value;
+    const restingScroll = Math.min(
+      Math.max(scrollX.value, minScroll),
+      maxScroll,
+    );
+    if (finished && restingScroll !== scrollX.value) {
+      scrollX.value = withSpring(restingScroll, springConfig, reportScrollEnd);
+      return;
+    }
+    reportScrollEnd(finished);
   };
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
@@ -159,12 +188,8 @@ export const scrollTransformGesture = ({
     })
     .onUpdate((e) => {
       isScrolling.value = true;
-      const viewportWidth = dimensions.width || DEFAULT_VIEWPORT_WIDTH;
-      const width = dimensions.totalContentWidth || DEFAULT_VIEWPORT_WIDTH;
-
       // For reversed scroll: minScroll is negative (end/newest), maxScroll is positive (start/oldest)
-      const minScroll = -newZero; // End position (newest data)
-      const maxScroll = Math.max(0, width - viewportWidth); // Start position (oldest data)
+      const [minScroll, maxScroll] = scrollBounds.value;
 
       const potentialNewValue = prevTranslateX.value + e.translationX;
       const rubberBandFactor = 0.55;
@@ -185,12 +210,7 @@ export const scrollTransformGesture = ({
     })
 
     .onEnd((e) => {
-      const viewportWidth = dimensions.width || 300;
-      const width = dimensions.totalContentWidth || 300;
-
-      // For reversed scroll: same bounds as onUpdate
-      const minScroll = -newZero; // End position (newest data)
-      const maxScroll = Math.max(0, width - viewportWidth); // Start position (oldest data)
+      const [minScroll, maxScroll] = scrollBounds.value;
       const currentScroll = scrollX.value;
 
       if (currentScroll < minScroll) {

@@ -1,5 +1,6 @@
 import { useRef, useEffect, useImperativeHandle } from "react";
-import type { SharedValue } from "react-native-reanimated";
+import { useSharedValue, type SharedValue } from "react-native-reanimated";
+import { getScrollBounds } from "./utils/transformGestures";
 
 export function useCartesianScrollHandler({
   data,
@@ -29,7 +30,8 @@ export function useCartesianScrollHandler({
   };
 
   // Start at the newest end once, when the plot is first measured. Later content or `maxScrollOffset` changes (data
-  // loading, a new y-label width) keep the scroll where it is; `scrollToEnd` moves it to the end on request.
+  // loading, a new y-label width) keep the scroll where it is while it stays in bounds; `scrollToEnd` moves it to the
+  // end on request.
   const isMeasured = dimensions.width > 0;
   const hasScrolledToEndRef = useRef(false);
   useEffect(() => {
@@ -38,6 +40,24 @@ export function useCartesianScrollHandler({
     // Since scroll view is reversed, "end" is at maxScrollOffset (not maxScroll)
     jumpTo(maxScrollOffset ? -maxScrollOffset : 0);
   }, [isMeasured, maxScrollOffset, prevTranslateX, scrollX, isScrolling]);
+
+  // Bounds that contract past a resting scroll (shorter data, a smaller `maxScrollOffset`) move it to their new edge,
+  // or the plot could go blank. A user scroll in progress returns into them as it settles.
+  const [minScroll, maxScroll] = getScrollBounds(dimensions, maxScrollOffset);
+  const scrollBounds = useSharedValue<[number, number]>([minScroll, maxScroll]);
+  const measuredBoundsRef = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    scrollBounds.value = [minScroll, maxScroll];
+    if (!isMeasured) return;
+    const prevBounds = measuredBoundsRef.current;
+    measuredBoundsRef.current = [minScroll, maxScroll];
+    if (!prevBounds || isScrolling.value) return;
+    const contractedScroll = getContractedScroll(scrollX.value, prevBounds, [
+      minScroll,
+      maxScroll,
+    ]);
+    if (contractedScroll !== undefined) jumpTo(contractedScroll);
+  }, [minScroll, maxScroll, isMeasured, scrollBounds, scrollX, isScrolling]);
 
   // Allows us to control the scroll from the parent component
   useImperativeHandle(
@@ -72,4 +92,20 @@ export function useCartesianScrollHandler({
     }),
     [xScale, dimensions, scrollX, prevTranslateX, isScrolling, maxScrollOffset],
   );
+
+  return scrollBounds;
+}
+
+/**
+ * Where a resting scroll moves when the scroll bounds change: to the new edge of a side that contracted past it.
+ * Otherwise it stays, including a `scrollTo` offset that already sat past an edge that didn't move.
+ */
+export function getContractedScroll(
+  scrollX: number,
+  [prevMinScroll, prevMaxScroll]: [number, number],
+  [minScroll, maxScroll]: [number, number],
+): number | undefined {
+  if (maxScroll < prevMaxScroll && scrollX > maxScroll) return maxScroll;
+  if (minScroll > prevMinScroll && scrollX < minScroll) return minScroll;
+  return undefined;
 }
