@@ -59,6 +59,12 @@ type CartesianChartProps<RawData extends Record<string, unknown>, XK extends key
      * `onScrollEnd` passed when its finger lifted, so a caller can tell a report from before a later change.
      */
     onScrollEnd?: (visibleXDomain: [number, number]) => void;
+    /**
+     * Where a user scroll comes to rest, as a worklet: given the x value at the plot's right edge where a released drag
+     * or fling would stop, the x value to stop at instead, such as the edge of a whole bar. The scroll decelerates onto
+     * it, keeping a fling's momentum.
+     */
+    snapScrollEnd?: (rightEdgeX: number) => number;
     scrollState?: boolean;
     actionsRef?: MutableRefObject<CartesianActionsHandle<ChartPressState<{
         x: InputFields<RawData>[XK];

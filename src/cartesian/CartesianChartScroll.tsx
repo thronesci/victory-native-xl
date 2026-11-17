@@ -127,6 +127,12 @@ type CartesianChartProps<
    * `onScrollEnd` passed when its finger lifted, so a caller can tell a report from before a later change.
    */
   onScrollEnd?: (visibleXDomain: [number, number]) => void;
+  /**
+   * Where a user scroll comes to rest, as a worklet: given the x value at the plot's right edge where a released drag
+   * or fling would stop, the x value to stop at instead, such as the edge of a whole bar. The scroll decelerates onto
+   * it, keeping a fling's momentum.
+   */
+  snapScrollEnd?: (rightEdgeX: number) => number;
   scrollState?: boolean;
   actionsRef?: MutableRefObject<CartesianActionsHandle<
     | ChartPressState<{
@@ -186,6 +192,7 @@ function CartesianChartContent<
   scrollState,
   onScroll,
   onScrollEnd,
+  snapScrollEnd,
   onVisibleTicksChange,
   scrollControllerRef,
   maxScrollOffset = 50,
@@ -502,6 +509,29 @@ function CartesianChartContent<
     };
   }, [onScrollEnd]);
 
+  // `snapScrollEnd` in scroll offsets. A point is drawn at its x plus the scroll plus `drawnShift` (`scrollXDerived`).
+  const snapScroll = React.useMemo(() => {
+    if (!snapScrollEnd) return undefined;
+    const [domainStart = 0, domainEnd = 0] = xScale.domain();
+    const [rangeStart = 0, rangeEnd = 0] = xScale.range();
+    const pixelsPerX = (rangeEnd - rangeStart) / (domainEnd - domainStart);
+    const plotRight = chartBounds.right;
+    const drawnShift = size.width - (dimensions.totalContentWidth || 0);
+    return (scroll: number) => {
+      "worklet";
+      const rightEdgeX =
+        domainStart +
+        (plotRight - scroll - drawnShift - rangeStart) / pixelsPerX;
+      return scroll + (rightEdgeX - snapScrollEnd(rightEdgeX)) * pixelsPerX;
+    };
+  }, [
+    snapScrollEnd,
+    xScale,
+    chartBounds.right,
+    size.width,
+    dimensions.totalContentWidth,
+  ]);
+
   // Memoize the composed gesture
   const composedGesture = React.useMemo(() => {
     let composed = customGestures ?? Gesture.Race();
@@ -515,6 +545,7 @@ function CartesianChartContent<
           dimensions,
           onScroll,
           onScrollEnd: handleScrollEnd,
+          snapScroll,
           scrollBounds,
           isScrolling,
         }),
@@ -530,6 +561,7 @@ function CartesianChartContent<
     scrollX,
     onScroll,
     handleScrollEnd,
+    snapScroll,
     scrollBounds,
     isScrolling,
   ]);

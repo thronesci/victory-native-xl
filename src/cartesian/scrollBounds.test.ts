@@ -7,7 +7,11 @@ import {
 } from "./utils/transformGestures";
 
 type Animation = {
-  config?: { clamp: [number, number] };
+  config?: {
+    clamp?: [number, number];
+    duration?: number;
+    easing?: (progress: number) => number;
+  };
   toValue?: number;
   callback: (finished: boolean) => void;
 };
@@ -33,6 +37,11 @@ vi.mock("react-native-reanimated", () => ({
     _config: unknown,
     callback: (finished: boolean) => void,
   ): Animation => ({ toValue, callback }),
+  withTiming: (
+    toValue: number,
+    config: Animation["config"],
+    callback: (finished: boolean) => void,
+  ): Animation => ({ toValue, config, callback }),
 }));
 vi.mock("@shopify/react-native-skia", () => ({}));
 vi.mock("react-native-gesture-handler", () => ({
@@ -78,7 +87,13 @@ describe("getContractedScroll", () => {
 });
 
 describe("scrollTransformGesture", () => {
-  function fling(bounds: [number, number]) {
+  function fling(
+    bounds: [number, number],
+    {
+      velocityX = -2000,
+      snapScroll,
+    }: { velocityX?: number; snapScroll?: (scrollX: number) => number } = {},
+  ) {
     const scrollX: { value: number | Animation } = { value: 0 };
     const scrollBounds = { value: bounds };
     const isScrolling = { value: false };
@@ -89,12 +104,13 @@ describe("scrollTransformGesture", () => {
       viewportWidth: 300,
       dimensions: { width: 300, totalContentWidth: 900 },
       onScrollEnd,
+      snapScroll,
       scrollBounds: scrollBounds as SharedValue<[number, number]>,
       isScrolling: isScrolling as SharedValue<boolean>,
     });
     panHandlers.onStart();
     panHandlers.onUpdate({ translationX: 0 });
-    panHandlers.onEnd({ velocityX: -2000 });
+    panHandlers.onEnd({ velocityX });
     const decay = scrollX.value as Animation;
     // Runs an animation to `value`, then calls its completion.
     const settle = (
@@ -142,5 +158,31 @@ describe("scrollTransformGesture", () => {
     expect(settle(decay, -80, false)).toBe(-80);
     expect(onScrollEnd).not.toHaveBeenCalled();
     expect(isScrolling.value).toBe(false);
+  });
+
+  describe("with a snap", () => {
+    // Rests on multiples of 40 px, such as whole 40 px bars.
+    const snapScroll = (scrollX: number) => Math.round(scrollX / 40) * 40;
+
+    it("decelerates a fling onto the snapped rest nearest where its momentum would stop", () => {
+      const { onScrollEnd, decay, settle } = fling([-80, 600], {
+        velocityX: 300,
+        snapScroll,
+      });
+
+      // Momentum alone would stop at about 150 px.
+      expect(decay.toValue).toBe(160);
+      expect(decay.config?.easing?.(0)).toBe(0);
+      expect(decay.config?.easing?.(1)).toBeCloseTo(1);
+      expect(decay.config?.duration).toBeGreaterThan(0);
+      settle(decay, 160);
+      expect(onScrollEnd).toHaveBeenCalledWith(160);
+    });
+
+    it("keeps the snapped rest inside the bounds", () => {
+      const { decay } = fling([-80, 600], { velocityX: 5000, snapScroll });
+
+      expect(decay.toValue).toBe(600);
+    });
   });
 });

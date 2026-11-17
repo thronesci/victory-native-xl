@@ -9,9 +9,11 @@ import type { ChartTransformState } from "../hooks/useChartTransformState";
 import {
   withDecay,
   cancelAnimation,
+  type AnimationCallback,
   type SharedValue,
   runOnJS,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 type Dimension = "x" | "y";
@@ -114,6 +116,41 @@ const springConfig = {
 };
 
 const DEFAULT_VIEWPORT_WIDTH = 300;
+// UIScrollView's normal deceleration rate is 0.998 per millisecond: a fling's speed falls by e every ~500 ms.
+const DECELERATION_TIME_CONSTANT_MS = -1 / Math.log(0.998);
+// A scroll decelerating onto where it rests is done once it is this close.
+const REST_DISTANCE = 0.5;
+
+/**
+ * Decelerates from `from` onto `to` along UIScrollView's exponential curve: the one a fling of the same reach follows,
+ * scaled to end exactly on `to`. As with UIKit's adjusted target content offset, a fling keeps its momentum and only
+ * where it rests moves.
+ */
+const withDecelerationTo = (
+  from: number,
+  to: number,
+  callback: AnimationCallback,
+) => {
+  "worklet";
+  // Time constants until the exponential would come within REST_DISTANCE; normalizing the curve rests it there exactly.
+  const timeConstants = Math.log(
+    Math.max(Math.abs(to - from), 2 * REST_DISTANCE) / REST_DISTANCE,
+  );
+  return withTiming(
+    to,
+    {
+      duration: timeConstants * DECELERATION_TIME_CONSTANT_MS,
+      easing: (progress: number) => {
+        "worklet";
+        return (
+          (1 - Math.exp(-timeConstants * progress)) /
+          (1 - Math.exp(-timeConstants))
+        );
+      },
+    },
+    callback,
+  );
+};
 
 /**
  * Where a user scroll can rest, `[newest end, oldest start]`. The scroll is reversed, so the end is negative and the
@@ -150,6 +187,7 @@ export const scrollTransformGesture = ({
   dimensions,
   onScroll,
   onScrollEnd,
+  snapScroll,
   scrollBounds,
   isScrolling,
 }: {
@@ -160,6 +198,11 @@ export const scrollTransformGesture = ({
   onScroll?: (data: any) => void;
   /** Called on JS with the final `scrollX` once a user scroll's fling or spring-back comes to rest. */
   onScrollEnd?: (scrollX: number) => void;
+  /**
+   * Where a released drag or fling that would stop at `scrollX` rests instead. The scroll decelerates onto it; without
+   * it, a fling decays with `withDecay` and rests anywhere.
+   */
+  snapScroll?: (scrollX: number) => number;
   /** The current `getScrollBounds`. A fling outlives the render that started it, so it reads them as it settles. */
   scrollBounds: SharedValue<[number, number]>;
   isScrolling: SharedValue<boolean>;
@@ -231,6 +274,22 @@ export const scrollTransformGesture = ({
         scrollX.value = withSpring(minScroll, springConfig, endScroll);
       } else if (currentScroll > maxScroll) {
         scrollX.value = withSpring(maxScroll, springConfig, endScroll);
+      } else if (snapScroll) {
+        const restingScroll = Math.min(
+          Math.max(
+            snapScroll(
+              currentScroll +
+                (e.velocityX / 1000) * DECELERATION_TIME_CONSTANT_MS,
+            ),
+            minScroll,
+          ),
+          maxScroll,
+        );
+        scrollX.value = withDecelerationTo(
+          currentScroll,
+          restingScroll,
+          endScroll,
+        );
       } else {
         scrollX.value = withDecay(
           {
