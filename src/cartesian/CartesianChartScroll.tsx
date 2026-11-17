@@ -313,7 +313,6 @@ function CartesianChartContent<
   useCartesianScrollHandler({
     data,
     dimensions,
-    viewport,
     scrollX,
     xScale,
     scrollControllerRef,
