@@ -54,7 +54,7 @@ import {
   type PanTransformGestureConfig,
   pinchTransformGesture,
   type PinchTransformGestureConfig,
-  type ScrollRest,
+  type ScrollGeometry,
   scrollTransformGesture,
 } from "./utils/transformGestures";
 import {
@@ -123,9 +123,10 @@ type CartesianChartProps<
   customGestures?: ComposedGesture;
   onScroll?: (data: any) => void;
   /**
-   * Called once when a user scroll comes to rest, with the x values at the plot's left and right edges. Not called
-   * for `scrollTo`/`scrollToEnd`, or for a scroll whose fling another scroll interrupts. A scroll reports to the
-   * `onScrollEnd` passed when its finger lifted, so a caller can tell a report from before a later change.
+   * Called once when a user scroll comes to rest, with the x values at the plot's left and right edges, worked out
+   * from the frame it rests on. Not called for `scrollTo`/`scrollToEnd`, for a scroll whose fling another scroll
+   * interrupts, or while the chart has no finite x values (no data). A scroll reports to the `onScrollEnd` passed when
+   * its finger lifted, so a caller can tell a report from before a later change.
    */
   onScrollEnd?: (visibleXDomain: [number, number]) => void;
   /**
@@ -136,11 +137,12 @@ type CartesianChartProps<
   onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
   /**
    * Where a user scroll comes to rest, as a worklet: given the x value at the plot's right edge where a released drag
-   * or fling would stop, inside the scroll limits, the x value to stop at instead, such as the edge of a whole bar. The
-   * scroll decelerates onto it, keeping a fling's momentum, or springs back to it from past a limit, and rests on it
-   * if the chart remeasures meanwhile.
+   * or fling would stop, inside the scroll limits, and the right-edge x values the limits reach, the x value to stop at
+   * instead, such as the edge of a whole bar inside them. The scroll decelerates onto it, keeping a fling's momentum,
+   * or springs back to it from past a limit, and rests on it if the chart remeasures meanwhile. A pick outside the
+   * limits rests at the nearer one.
    */
-  snapScrollEnd?: (rightEdgeX: number) => number;
+  snapScrollEnd?: (rightEdgeX: number, reachable: [number, number]) => number;
   scrollState?: boolean;
   actionsRef?: MutableRefObject<CartesianActionsHandle<
     | ChartPressState<{
@@ -498,29 +500,10 @@ function CartesianChartContent<
       />
     ) : null;
 
-  // A fling can outlast the render that started it, so its end reads the latest geometry.
-  const scrollEndGeometry = React.useRef({ dimensions, size, xScale, chartBounds });
-  React.useLayoutEffect(() => {
-    scrollEndGeometry.current = { dimensions, size, xScale, chartBounds };
-  }, [dimensions, size, xScale, chartBounds]);
-  const handleScrollEnd = React.useMemo(() => {
-    if (!onScrollEnd) return undefined;
-    return (finalScrollX: number) => {
-      const { dimensions, size, xScale, chartBounds } =
-        scrollEndGeometry.current;
-      // `scrollXDerived` at rest: a point's x plus it is where the point is drawn.
-      const offset =
-        finalScrollX - (dimensions.totalContentWidth || 0) + size.width;
-      onScrollEnd([
-        xScale.invert(chartBounds.left - offset),
-        xScale.invert(chartBounds.right - offset),
-      ]);
-    };
-  }, [onScrollEnd]);
-
-  // The plot's geometry for worklets that outlast a render, such as a settling fling: a point at x is drawn at
-  // `rangeStart + (x - domainStart) * pixelsPerX`, plus the scroll, plus `drawnShift` (`scrollXDerived`).
-  const scrollGeometry = useSharedValue({
+  // The plot's geometry for worklets that outlast a render, such as a settling fling or its report: a point at x is
+  // drawn at `rangeStart + (x - domainStart) * pixelsPerX`, plus the scroll, plus `drawnShift` (`scrollXDerived`).
+  // With no data or a zero-width domain there's no scale, and the worklets give no finite x value.
+  const scrollGeometryValues = useSharedValue({
     domainStart: 0,
     rangeStart: 0,
     pixelsPerX: Number.NaN,
@@ -531,42 +514,43 @@ function CartesianChartContent<
   React.useLayoutEffect(() => {
     const [domainStart = 0, domainEnd = 0] = xScale.domain();
     const [rangeStart = 0, rangeEnd = 0] = xScale.range();
-    scrollGeometry.value = {
+    const pixelsPerX = (rangeEnd - rangeStart) / (domainEnd - domainStart);
+    scrollGeometryValues.value = {
       domainStart,
       rangeStart,
-      pixelsPerX: (rangeEnd - rangeStart) / (domainEnd - domainStart),
+      pixelsPerX:
+        Number.isFinite(pixelsPerX) && pixelsPerX !== 0
+          ? pixelsPerX
+          : Number.NaN,
       plotLeft: chartBounds.left,
       plotRight: chartBounds.right,
       drawnShift: size.width - (dimensions.totalContentWidth || 0),
     };
   }, [
-    scrollGeometry,
+    scrollGeometryValues,
     xScale,
     chartBounds.left,
     chartBounds.right,
     size.width,
     dimensions.totalContentWidth,
   ]);
-  // `snapScrollEnd` in scroll terms. With no data or a zero-width domain, these give no finite x value.
-  const scrollRest = React.useMemo<ScrollRest | undefined>(() => {
-    if (!snapScrollEnd) return undefined;
+  const scrollGeometry = React.useMemo<ScrollGeometry>(() => {
     const xAt = (pixel: number, scroll: number) => {
       "worklet";
-      const g = scrollGeometry.value;
+      const g = scrollGeometryValues.value;
       return (
         g.domainStart +
         (pixel - scroll - g.drawnShift - g.rangeStart) / g.pixelsPerX
       );
     };
     return {
-      snap: snapScrollEnd,
       rightEdgeXAt: (scroll) => {
         "worklet";
-        return xAt(scrollGeometry.value.plotRight, scroll);
+        return xAt(scrollGeometryValues.value.plotRight, scroll);
       },
       scrollAt: (rightEdgeX) => {
         "worklet";
-        const g = scrollGeometry.value;
+        const g = scrollGeometryValues.value;
         return (
           g.plotRight -
           g.drawnShift -
@@ -576,11 +560,11 @@ function CartesianChartContent<
       },
       visibleXDomainAt: (scroll) => {
         "worklet";
-        const g = scrollGeometry.value;
+        const g = scrollGeometryValues.value;
         return [xAt(g.plotLeft, scroll), xAt(g.plotRight, scroll)];
       },
     };
-  }, [snapScrollEnd, scrollGeometry]);
+  }, [scrollGeometryValues]);
 
   // Memoize the composed gesture
   const composedGesture = React.useMemo(() => {
@@ -594,9 +578,10 @@ function CartesianChartContent<
           viewportWidth: size.width,
           dimensions,
           onScroll,
-          onScrollEnd: handleScrollEnd,
+          onScrollEnd,
           onScrollEndTarget,
-          scrollRest,
+          scrollGeometry,
+          snapScrollEnd,
           scrollBounds,
           isScrolling,
         }),
@@ -611,9 +596,10 @@ function CartesianChartContent<
     prevTranslateX,
     scrollX,
     onScroll,
-    handleScrollEnd,
+    onScrollEnd,
     onScrollEndTarget,
-    scrollRest,
+    scrollGeometry,
+    snapScrollEnd,
     scrollBounds,
     isScrolling,
   ]);

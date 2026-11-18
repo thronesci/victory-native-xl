@@ -54,9 +54,10 @@ type CartesianChartProps<RawData extends Record<string, unknown>, XK extends key
     customGestures?: ComposedGesture;
     onScroll?: (data: any) => void;
     /**
-     * Called once when a user scroll comes to rest, with the x values at the plot's left and right edges. Not called
-     * for `scrollTo`/`scrollToEnd`, or for a scroll whose fling another scroll interrupts. A scroll reports to the
-     * `onScrollEnd` passed when its finger lifted, so a caller can tell a report from before a later change.
+     * Called once when a user scroll comes to rest, with the x values at the plot's left and right edges, worked out
+     * from the frame it rests on. Not called for `scrollTo`/`scrollToEnd`, for a scroll whose fling another scroll
+     * interrupts, or while the chart has no finite x values (no data). A scroll reports to the `onScrollEnd` passed when
+     * its finger lifted, so a caller can tell a report from before a later change.
      */
     onScrollEnd?: (visibleXDomain: [number, number]) => void;
     /**
@@ -67,11 +68,12 @@ type CartesianChartProps<RawData extends Record<string, unknown>, XK extends key
     onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
     /**
      * Where a user scroll comes to rest, as a worklet: given the x value at the plot's right edge where a released drag
-     * or fling would stop, inside the scroll limits, the x value to stop at instead, such as the edge of a whole bar. The
-     * scroll decelerates onto it, keeping a fling's momentum, or springs back to it from past a limit, and rests on it
-     * if the chart remeasures meanwhile.
+     * or fling would stop, inside the scroll limits, and the right-edge x values the limits reach, the x value to stop at
+     * instead, such as the edge of a whole bar inside them. The scroll decelerates onto it, keeping a fling's momentum,
+     * or springs back to it from past a limit, and rests on it if the chart remeasures meanwhile. A pick outside the
+     * limits rests at the nearer one.
      */
-    snapScrollEnd?: (rightEdgeX: number) => number;
+    snapScrollEnd?: (rightEdgeX: number, reachable: [number, number]) => number;
     scrollState?: boolean;
     actionsRef?: MutableRefObject<CartesianActionsHandle<ChartPressState<{
         x: InputFields<RawData>[XK];
