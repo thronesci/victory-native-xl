@@ -103,14 +103,16 @@ export const MemoizedXAxis = <
           : xScaleProp.ticks(tickCount),
     [tickValues, tickCount, enableRescaling, xScale, xScaleProp],
   );
-  // Each tick's x in the scrolling content, which `transformX` moves. Ticks are ascending, so these are too.
+  // Each tick's x in the scrolling content, which `transformX` moves. Ticks are ascending, so these are too. Typed
+  // arrays reach the UI thread in one copy; worklets copy a plain array's numbers one by one, which for thousands of
+  // ticks slowed every chart render.
   const tickXs = useMemo(
-    () => xTicksNormalized.map((tick) => xScale(tick)),
+    () => Float64Array.from(xTicksNormalized, (tick) => xScale(tick)),
     [xTicksNormalized, xScale],
   );
   // What each tick's label formats: the tick, or for non-numerical data the datum at its index.
-  const labelValues = useMemo(() => {
-    if (isNumericalData) return xTicksNormalized;
+  const labelValues = useMemo((): ArrayLike<unknown> => {
+    if (isNumericalData) return Float64Array.from(xTicksNormalized);
     // The first occurrence of each value.
     const firstIndices = new Map<string, number>();
     ix.forEach((value, index) => {
@@ -127,7 +129,7 @@ export const MemoizedXAxis = <
     () =>
       isWorkletFunction(formatXLabel)
         ? null
-        : labelValues.map((value) => formatXLabel(value as never)),
+        : Array.from(labelValues, (value) => formatXLabel(value as never)),
     [formatXLabel, labelValues],
   );
 
@@ -284,8 +286,8 @@ function useReportVisibleTicks<
   labelXCenter,
   onVisibleTicksChange,
 }: {
-  tickXs: number[];
-  labelValues: unknown[];
+  tickXs: Float64Array;
+  labelValues: ArrayLike<unknown>;
   chartBounds: ChartBounds;
   scrollXDerived: SharedValue<number>;
   isScrolling: SharedValue<boolean>;
@@ -298,7 +300,9 @@ function useReportVisibleTicks<
       debounce(
         (start: number, end: number) =>
           onVisibleTicksChange(
-            labelValues.slice(start, end) as Array<ValueOf<RawData[XK]>>,
+            Array.prototype.slice.call(labelValues, start, end) as Array<
+              ValueOf<RawData[XK]>
+            >,
           ),
         50,
       ),

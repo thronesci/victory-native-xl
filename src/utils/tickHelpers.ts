@@ -30,7 +30,7 @@ export const downsampleTicks = (tickValues: number[], tickCount: number) => {
 
 // Each worklet captures the ones it calls when it is defined, so they come first.
 /** How many of the ascending `tickXs` are below `x`, or at or below it with `orEqual`. */
-const countBelow = (tickXs: number[], x: number, orEqual: boolean) => {
+const countBelow = (tickXs: ArrayLike<number>, x: number, orEqual: boolean) => {
   "worklet";
   let low = 0;
   let high = tickXs.length;
@@ -48,7 +48,7 @@ const countBelow = (tickXs: number[], x: number, orEqual: boolean) => {
 
 /** The ticks at [from, to], as [start, end) indices into the ascending `tickXs`. */
 export const getTickRange = (
-  tickXs: number[],
+  tickXs: ArrayLike<number>,
   from: number,
   to: number,
 ): [number, number] => {
@@ -62,7 +62,7 @@ export const getTickRange = (
  * binary search, so the cost stays the same however many ticks the axis has.
  */
 export const getDrawnTickRange = (
-  tickXs: number[],
+  tickXs: ArrayLike<number>,
   scrollX: number,
   { left, right }: { left: number; right: number },
 ): [number, number] => {
