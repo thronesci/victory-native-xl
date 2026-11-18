@@ -31,19 +31,20 @@ export const downsampleTicks = (tickValues: number[], tickCount: number) => {
 };
 
 /**
- * A scroll axis's fixed ticks, ascending, as its binary search needs: `tickValues` may come in any order. Without them,
- * the scale's own ticks.
+ * A scroll axis's fixed ticks in order of their x (`toX`), as its binary search needs: `tickValues` may come in any
+ * order, and a descending viewport puts larger values further left. Without them, the scale's own ticks.
  */
 export const getFixedTicks = (
   tickValues: number[] | undefined,
   tickCount: number,
   scaleTicks: (count: number) => number[],
+  toX: (tick: number) => number,
 ) =>
   [
     ...(tickValues
       ? downsampleTicks(tickValues, tickCount)
       : scaleTicks(tickCount)),
-  ].sort((a, b) => a - b);
+  ].sort((a, b) => toX(a) - toX(b));
 
 // Each worklet captures the ones it calls when it is defined, so they come first.
 /** How many of the ascending `tickXs` are below `x`, or at or below it with `orEqual`. */
@@ -87,8 +88,9 @@ export type PageTickSource<T> =
   | { tickXs: ArrayLike<number>; values: ArrayLike<T> };
 
 /**
- * The ticks a scroll axis draws at [from, to] in its content's x: their x, their values for labels and reports, the
- * first one's index among fixed ticks, and whether the axis's first and last ticks are among them.
+ * The ticks a scroll axis draws at [from, to] in its content's x, in order of x: their x, their values for labels and
+ * reports, the first one's index among fixed ticks, and whether the content's leftmost and rightmost ticks are among
+ * them.
  */
 export const getPageTicks = <T>(
   from: number,
@@ -103,15 +105,23 @@ export const getPageTicks = <T>(
 } => {
   "worklet";
   if ("getXTicks" in source) {
-    const fromValue = (from - source.xOffset) / source.xPerValue;
-    const toValue = (to - source.xOffset) / source.xPerValue;
-    const values = source.getXTicks(fromValue, toValue);
+    const { xOffset, xPerValue } = source;
+    const fromValue = (from - xOffset) / xPerValue;
+    const toValue = (to - xOffset) / xPerValue;
+    const ticks = source.getXTicks(
+      Math.min(fromValue, toValue),
+      Math.max(fromValue, toValue),
+    );
+    // A descending viewport puts the larger values further left.
+    const values = xPerValue < 0 ? ticks.slice().reverse() : ticks;
+    const firstX = xOffset + source.firstValue * xPerValue;
+    const lastX = xOffset + source.lastValue * xPerValue;
     return {
-      xs: values.map((value) => source.xOffset + value * source.xPerValue),
+      xs: values.map((value) => xOffset + value * xPerValue),
       values,
       start: 0,
-      hasFirst: fromValue <= source.firstValue,
-      hasLast: toValue >= source.lastValue,
+      hasFirst: from <= Math.min(firstX, lastX),
+      hasLast: to >= Math.max(firstX, lastX),
     };
   }
   const [start, end] = getTickRange(source.tickXs, from, to);
@@ -124,16 +134,33 @@ export const getPageTicks = <T>(
   };
 };
 
-/** The values of a page's ticks at [from, to] in the content's x. */
+/** A page's ticks at [from, to] in the content's x: their x and values. */
 export const getTicksIn = <T>(
-  xs: ArrayLike<number>,
+  xs: number[],
   values: T[],
   from: number,
   to: number,
-): T[] => {
+): { xs: number[]; values: T[] } => {
   "worklet";
   const [start, end] = getTickRange(xs, from, to);
-  return values.slice(start, end);
+  return { xs: xs.slice(start, end), values: values.slice(start, end) };
+};
+
+/**
+ * Whether the ticks in view changed: compared by position, as categories can repeat a label, so the same values at the
+ * ends don't mean the same ticks.
+ */
+export const visibleTicksChanged = (
+  current: { xs: number[] },
+  previous: { xs: number[] } | null,
+) => {
+  "worklet";
+  return (
+    previous === null ||
+    current.xs.length !== previous.xs.length ||
+    current.xs[0] !== previous.xs[0] ||
+    current.xs[current.xs.length - 1] !== previous.xs[previous.xs.length - 1]
+  );
 };
 
 /**

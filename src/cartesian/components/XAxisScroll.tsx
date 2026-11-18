@@ -23,6 +23,7 @@ import {
   getPageTicks,
   getTicksIn,
   type PageTickSource,
+  visibleTicksChanged,
 } from "../../utils/tickHelpers";
 import type {
   ChartBounds,
@@ -99,14 +100,17 @@ export const MemoizedXAxis = <
   const [y1 = 0, y2 = 0] = yScale.domain();
   const fontSize = font?.getSize() ?? 0;
 
-  // Use tickValues if provided, otherwise generate ticks, ascending. With `getXTicks` the axis asks for them as it
+  // Use tickValues if provided, otherwise generate ticks, in order of x. With `getXTicks` the axis asks for them as it
   // scrolls instead.
   const xTicksNormalized = useMemo(
     () =>
       getXTicks
         ? []
-        : getFixedTicks(tickValues, tickCount, (count) =>
-            (enableRescaling ? xScale : xScaleProp).ticks(count),
+        : getFixedTicks(
+            tickValues,
+            tickCount,
+            (count) => (enableRescaling ? xScale : xScaleProp).ticks(count),
+            (tick) => xScale(tick),
           ),
     [getXTicks, tickValues, tickCount, enableRescaling, xScale, xScaleProp],
   );
@@ -353,12 +357,9 @@ function useReportVisibleTicks<
         report &&
         current &&
         isScrolling.value &&
-        (previous === null ||
-          current.length !== previous.length ||
-          current[0] !== previous[0] ||
-          current[current.length - 1] !== previous[previous.length - 1])
+        visibleTicksChanged(current, previous)
       ) {
-        runOnJS(report)(current);
+        runOnJS(report)(current.values);
       }
     },
     [report, drawn, chartBounds, labelXCenter, scrollXDerived, isScrolling],

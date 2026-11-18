@@ -5,6 +5,7 @@ import {
   getFixedTicks,
   getPageTicks,
   getTicksIn,
+  visibleTicksChanged,
 } from "./tickHelpers";
 
 describe("getDomainFromTicks", () => {
@@ -65,7 +66,12 @@ describe("a scroll axis's page of ticks", () => {
   };
 
   it("draws fixed ticks passed in any order", () => {
-    const ticks = getFixedTicks([600, 800, 1000, 50], 0, () => []);
+    const ticks = getFixedTicks(
+      [600, 800, 1000, 50],
+      0,
+      () => [],
+      (tick) => tick,
+    );
     const [from, to] = getDrawnRange(0, plot);
 
     expect(
@@ -88,7 +94,7 @@ describe("a scroll axis's page of ticks", () => {
         page.values,
         plot.left - scrollX,
         plot.right - scrollX,
-      );
+      ).values;
     };
 
     expect(inView(0)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
@@ -113,5 +119,57 @@ describe("a scroll axis's page of ticks", () => {
     expect(page(0)).toEqual({ hasFirst: true, hasLast: false });
     expect(page(-450)).toEqual({ hasFirst: false, hasLast: false });
     expect(page(-900)).toEqual({ hasFirst: false, hasLast: true });
+  });
+
+  // A viewport from 1000 down to 900 puts larger values further left: x = 1000 - value.
+  describe("on a descending viewport", () => {
+    const toX = (value: number) => 1000 - value;
+
+    it("draws the fixed ticks in view", () => {
+      const ticks = getFixedTicks([0, 200, 500, 950, 1000], 0, () => [], toX);
+      const xs = ticks.map(toX);
+      const [from, to] = getDrawnRange(0, plot);
+      const page = getPageTicks(from, to, { tickXs: xs, values: ticks });
+
+      expect(
+        getTicksIn(page.xs, page.values, plot.left, plot.right).values,
+      ).toEqual([1000, 950]);
+    });
+
+    it("asks for generated ticks with ordered bounds, in order of x", () => {
+      const source = {
+        getXTicks: everyTen,
+        xOffset: 1000,
+        xPerValue: -1,
+        firstValue: 0,
+        lastValue: 1000,
+      };
+      const [from, to] = getDrawnRange(0, plot);
+      const page = getPageTicks(from, to, source);
+
+      expect(
+        getTicksIn(page.xs, page.values, plot.left, plot.right).values,
+      ).toEqual([1000, 990, 980, 970, 960, 950, 940, 930, 920, 910, 900]);
+      expect(page.xs).toEqual([...page.xs].sort((a, b) => a - b));
+      // The plot's left edge shows 1000, the data's last value.
+      expect([page.hasFirst, page.hasLast]).toEqual([true, false]);
+    });
+  });
+
+  it("notices a scroll that changes the ticks in view, even to the same labels at the ends", () => {
+    // Categories A, B, A, C, A, a tick every 10.
+    const xs = [0, 10, 20, 30, 40];
+    const values = ["A", "B", "A", "C", "A"];
+    const first = getTicksIn(xs, values, 0, 20);
+    const later = getTicksIn(xs, values, 20, 40);
+
+    expect([first.values, later.values]).toEqual([
+      ["A", "B", "A"],
+      ["A", "C", "A"],
+    ]);
+    expect(visibleTicksChanged(later, first)).toBe(true);
+    expect(visibleTicksChanged(getTicksIn(xs, values, 0, 20), first)).toBe(
+      false,
+    );
   });
 });
