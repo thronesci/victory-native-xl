@@ -10,6 +10,7 @@ import {
   withDecay,
   cancelAnimation,
   type AnimationCallback,
+  ReduceMotion,
   type SharedValue,
   runOnJS,
   withSpring,
@@ -124,7 +125,8 @@ const REST_DISTANCE = 0.5;
 /**
  * Decelerates from `from` onto `to` along UIScrollView's exponential curve: the one a fling of the same reach follows,
  * scaled to end exactly on `to`. As with UIKit's adjusted target content offset, a fling keeps its momentum and only
- * where it rests moves.
+ * where it rests moves. Reduce Motion doesn't skip it, as it doesn't stop a UIScrollView decelerating: the momentum is
+ * the finger's own motion, and skipping the curve would jump the content to where it rests.
  */
 const withDecelerationTo = (
   from: number,
@@ -140,6 +142,7 @@ const withDecelerationTo = (
     to,
     {
       duration: timeConstants * DECELERATION_TIME_CONSTANT_MS,
+      reduceMotion: ReduceMotion.Never,
       easing: (progress: number) => {
         "worklet";
         return (

@@ -11,6 +11,7 @@ type Animation = {
     clamp?: [number, number];
     duration?: number;
     easing?: (progress: number) => number;
+    reduceMotion?: string;
   };
   toValue?: number;
   callback: (finished: boolean) => void;
@@ -25,6 +26,7 @@ const panHandlers = vi.hoisted(() => ({}) as PanHandlers);
 
 // Animations are records whose completion the test calls, as Reanimated does when one ends or is cancelled.
 vi.mock("react-native-reanimated", () => ({
+  ReduceMotion: { Never: "never" },
   useSharedValue: (value: unknown) => ({ value }),
   cancelAnimation: () => {},
   runOnJS: (fn: (...args: unknown[]) => void) => fn,
@@ -177,6 +179,13 @@ describe("scrollTransformGesture", () => {
       expect(decay.config?.duration).toBeGreaterThan(0);
       settle(decay, 160);
       expect(onScrollEnd).toHaveBeenCalledWith(160);
+    });
+
+    it("decelerates with Reduce Motion on, rather than jumping to where it rests", () => {
+      // Momentum is the finger's own motion, as in a UIScrollView.
+      const { decay } = fling([-80, 600], { velocityX: 300, snapScroll });
+
+      expect(decay.config?.reduceMotion).toBe("never");
     });
 
     it("keeps the snapped rest inside the bounds", () => {
