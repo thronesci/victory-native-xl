@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { getDrawnTickRange } from "./tickHelpers";
+import { getDomainFromTicks, getDrawnTickRange } from "./tickHelpers";
+
+describe("getDomainFromTicks", () => {
+  // Thirty years of ticks every other hour, more than a spread call can pass.
+  it("spans more ticks than a function takes arguments", () => {
+    const ticks = Array.from({ length: 140_000 }, (_, i) => 1_000 + i * 7_200);
+
+    expect(getDomainFromTicks(ticks)).toEqual([1_000, ticks.at(-1)]);
+  });
+
+  it("spans unsorted ticks", () => {
+    expect(getDomainFromTicks([5, -2, 9, 3])).toEqual([-2, 9]);
+  });
+});
 
 // 10,000 ticks 20 px apart, scrolled by `scrollX` across a 360 px plot.
 const TICK_SPACING = 20;

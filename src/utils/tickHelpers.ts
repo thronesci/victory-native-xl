@@ -75,14 +75,6 @@ export const getDrawnTickRange = (
   );
 };
 
-const getMinValue = (arr: Array<number>): number => {
-  return Math.min(...arr);
-};
-
-const getMaxValue = (arr: Array<number>): number => {
-  return Math.max(...arr);
-};
-
 export const getDomainFromTicks = (
   tickValues: number[] | undefined,
 ): [number, number] | undefined => {
@@ -97,8 +89,13 @@ export const getDomainFromTicks = (
     numTicksArr = tickValues;
   }
 
-  const min = getMinValue(numTicksArr);
-  const max = getMaxValue(numTicksArr);
+  // A loop, not Math.min(...ticks): a scroll axis can pass more ticks than a call takes arguments.
+  let min = Infinity;
+  let max = -Infinity;
+  for (const tick of numTicksArr) {
+    if (tick < min) min = tick;
+    if (tick > max) max = tick;
+  }
 
   return [min, max];
 };
