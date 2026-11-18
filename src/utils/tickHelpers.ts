@@ -28,6 +28,53 @@ export const downsampleTicks = (tickValues: number[], tickCount: number) => {
   return tickValues.filter((_, i) => i % k === 0);
 };
 
+// Each worklet captures the ones it calls when it is defined, so they come first.
+/** How many of the ascending `tickXs` are below `x`, or at or below it with `orEqual`. */
+const countBelow = (tickXs: number[], x: number, orEqual: boolean) => {
+  "worklet";
+  let low = 0;
+  let high = tickXs.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    const tickX = tickXs[mid]!;
+    if (tickX < x || (orEqual && tickX === x)) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+};
+
+/** The ticks at [from, to], as [start, end) indices into the ascending `tickXs`. */
+export const getTickRange = (
+  tickXs: number[],
+  from: number,
+  to: number,
+): [number, number] => {
+  "worklet";
+  return [countBelow(tickXs, from, false), countBelow(tickXs, to, true)];
+};
+
+/**
+ * The ticks a scrolling x axis draws at `scrollX`, as [start, end) indices into the ascending content positions
+ * `tickXs`: those within half the plot's width of it, so a label centered on a tick just outside still shows. Found by
+ * binary search, so the cost stays the same however many ticks the axis has.
+ */
+export const getDrawnTickRange = (
+  tickXs: number[],
+  scrollX: number,
+  { left, right }: { left: number; right: number },
+): [number, number] => {
+  "worklet";
+  const buffer = (right - left) / 2;
+  return getTickRange(
+    tickXs,
+    left - buffer - scrollX,
+    right + buffer - scrollX,
+  );
+};
+
 const getMinValue = (arr: Array<number>): number => {
   return Math.min(...arr);
 };

@@ -1,32 +1,34 @@
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useMemo } from "react";
 import { StyleSheet } from "react-native";
 import {
-  type Color,
+  createPicture,
   Group,
-  Line,
-  Text,
-  vec,
-  type SkFont as Font,
-  type SkPoint,
+  Picture,
+  Skia,
+  type SkFont,
 } from "@shopify/react-native-skia";
-
-import { boundsToClip } from "../../utils/boundsToClip";
-import { DEFAULT_TICK_COUNT, downsampleTicks } from "../../utils/tickHelpers";
-import type {
-  ChartBounds,
-  InputDatum,
-  InputFields,
-  Scale,
-  ValueOf,
-  XAxisProps,
-  XAxisPropsWithDefaults,
-} from "../../types";
 import {
+  isWorkletFunction,
   runOnJS,
   type SharedValue,
   useDerivedValue,
   useAnimatedReaction,
 } from "react-native-reanimated";
+
+import {
+  DEFAULT_TICK_COUNT,
+  downsampleTicks,
+  getDrawnTickRange,
+  getTickRange,
+} from "../../utils/tickHelpers";
+import type {
+  ChartBounds,
+  InputDatum,
+  InputFields,
+  ValueOf,
+  XAxisProps,
+  XAxisPropsWithDefaults,
+} from "../../types";
 
 // Simple debounce utility
 function debounce<T extends (...args: any[]) => any>(
@@ -51,12 +53,9 @@ export const MemoizedXAxis = <
   XK extends keyof InputFields<RawData>,
 >({
   xScale: xScaleProp,
-  ignoreClip,
   yScale,
   axisSide = "bottom",
-  yAxisSide = "left",
   labelPosition = "outset",
-  labelRotate,
   tickCount = DEFAULT_TICK_COUNT,
   tickValues,
   labelOffset = 2,
@@ -64,14 +63,12 @@ export const MemoizedXAxis = <
   lineWidth = StyleSheet.hairlineWidth,
   lineColor = "hsla(0, 0%, 0%, 0.25)",
   font,
-  formatXLabel = (label: ValueOf<InputDatum>) => String(label),
+  formatXLabel = defaultFormatXLabel,
   ix = [],
   isNumericalData,
-  linePathEffect,
   chartBounds,
   enableRescaling,
   zoom,
-  scrollX,
   onVisibleTicksChange,
   secondaryXFont,
   labelXCenter = false,
@@ -89,16 +86,6 @@ export const MemoizedXAxis = <
     return [{ translateX: scrollXDerived.value }];
   }, [scrollXDerived]);
 
-  // Create a mapping of unique values to their first occurrence index
-  const uniqueValueIndices = useMemo(() => {
-    return ix.reduce((acc, val, index) => {
-      if (!acc.has(String(val))) {
-        acc.set(String(val), index);
-      }
-      return acc;
-    }, new Map<string, number>());
-  }, [ix]);
-
   const xScale = useMemo(
     () => (zoom ? zoom.rescaleX(xScaleProp) : xScaleProp),
     [zoom, xScaleProp],
@@ -112,175 +99,61 @@ export const MemoizedXAxis = <
       tickValues
         ? downsampleTicks(tickValues, tickCount)
         : enableRescaling
-        ? xScale.ticks(tickCount)
-        : xScaleProp.ticks(tickCount),
+          ? xScale.ticks(tickCount)
+          : xScaleProp.ticks(tickCount),
     [tickValues, tickCount, enableRescaling, xScale, xScaleProp],
   );
+  // Each tick's x in the scrolling content, which `transformX` moves. Ticks are ascending, so these are too.
+  const tickXs = useMemo(
+    () => xTicksNormalized.map((tick) => xScale(tick)),
+    [xTicksNormalized, xScale],
+  );
+  // What each tick's label formats: the tick, or for non-numerical data the datum at its index.
+  const labelValues = useMemo(() => {
+    if (isNumericalData) return xTicksNormalized;
+    // The first occurrence of each value.
+    const firstIndices = new Map<string, number>();
+    ix.forEach((value, index) => {
+      if (!firstIndices.has(String(value)))
+        firstIndices.set(String(value), index);
+    });
+    return xTicksNormalized.map(
+      (tick) => ix[firstIndices.get(String(tick)) ?? tick],
+    );
+  }, [isNumericalData, xTicksNormalized, ix]);
+  // A worklet formats each label on the UI thread as its tick scrolls into view. Any other formatter can only run on
+  // JS, so it formats every tick here, which is fine for the few ticks such charts pass.
+  const jsLabels = useMemo(
+    () =>
+      isWorkletFunction(formatXLabel)
+        ? null
+        : labelValues.map((value) => formatXLabel(value as never)),
+    [formatXLabel, labelValues],
+  );
 
-  // Ref to store the last reported visible ticks on the JS thread
-  useProcessAndReportTicks({
-    scrollX,
-    scrollXDerived,
+  useReportVisibleTicks({
+    tickXs,
+    labelValues,
     chartBounds,
-    xTicksNormalized,
-    onVisibleTicksChange,
-    uniqueValueIndices,
-    isNumericalData,
-    ix,
-    xScale,
+    scrollXDerived,
     isScrolling,
     labelXCenter,
+    onVisibleTicksChange,
   });
 
-  return xTicksNormalized.map((tick, index, arr) => {
-    return (
-      <MemoTickGroup
-        visible={true}
-        key={`x-tick-${String(tick)}`}
-        lineWidth={lineWidth}
-        ignoreClip={true}
-        chartBounds={chartBounds}
-        transformX={transformX}
-        uniqueValueIndices={uniqueValueIndices}
-        tick={tick}
-        xScale={xScale}
-        yScale={yScale}
-        font={font}
-        labelRotate={labelRotate}
-        labelColor={labelColor}
-        secondaryXFont={secondaryXFont}
-        formatXLabel={formatXLabel}
-        isNumericalData={isNumericalData}
-        ix={ix}
-        labelXCenter={labelXCenter}
-        index={index}
-        arr={arr}
-        xTicksNormalized={xTicksNormalized}
-        y2={y2}
-        y1={y1}
-        lineColor={lineColor}
-        axisSide={axisSide}
-        labelPosition={labelPosition}
-        labelOffset={labelOffset}
-        fontSize={fontSize}
-      />
-    );
-  });
-};
-
-const MemoTickGroup = React.memo(TickGroup, (prev, next) => {
-  return (
-    prev.tick === next.tick &&
-    prev.xScale === next.xScale &&
-    prev.yScale === next.yScale &&
-    prev.index === next.index &&
-    prev.visible === next.visible
-  );
-});
-
-function TickGroup({
-  lineWidth,
-  ignoreClip,
-  chartBounds,
-  transformX,
-  uniqueValueIndices,
-  tick,
-  xScale,
-  yScale,
-  font,
-  labelColor,
-  secondaryXFont,
-  formatXLabel,
-  isNumericalData,
-  ix,
-  labelXCenter,
-  index,
-  arr,
-  xTicksNormalized,
-  y2,
-  y1,
-  lineColor,
-  axisSide,
-  labelPosition,
-  labelOffset,
-  fontSize,
-  visible,
-}: {
-  lineWidth: number;
-  ignoreClip: boolean;
-  chartBounds: ChartBounds;
-  transformX: SharedValue<{ translateX: number }[]>;
-  uniqueValueIndices: Map<string, number>;
-  tick: number;
-  xScale: Scale;
-  yScale: Scale;
-  font?: Font | null;
-  labelRotate?: number;
-  labelColor: string;
-  secondaryXFont?: Font | null;
-  formatXLabel: (label: any) => string | { top: string; bottom: string };
-  isNumericalData: boolean;
-  ix: any[];
-  labelXCenter: boolean;
-  index: number;
-  arr: number[];
-  xTicksNormalized: number[];
-  y2: number;
-  y1: number;
-  lineColor: Color;
-  axisSide: "top" | "bottom";
-  labelPosition: "inset" | "outset";
-  labelOffset: number;
-  fontSize: number;
-  visible: boolean;
-}) {
-  const indexPosition = uniqueValueIndices.get(String(tick)) ?? tick;
-  const tickPosition = tick;
-
-  const p1 = vec(xScale(tickPosition), yScale(y2));
-  const p2 = vec(xScale(tickPosition), yScale(y1));
-
-  const val = isNumericalData ? tick : ix[indexPosition];
-
-  const contentXValue = formatXLabel(val);
-  const contentX =
-    typeof contentXValue === "string" ? contentXValue : contentXValue.top;
-  const contentXBottom =
-    typeof contentXValue === "string" ? null : contentXValue.bottom;
-  const labelWidth =
-    font
-      ?.getGlyphWidths?.(font.getGlyphIDs(contentX))
-      .reduce((sum, value) => sum + value, 0) ?? 0;
-  const labelWidthBottom =
-    contentXBottom && secondaryXFont
-      ? secondaryXFont
-          .getGlyphWidths(secondaryXFont.getGlyphIDs(contentXBottom))
-          .reduce((sum, value) => sum + value, 0)
-      : 0;
-
-  const canFitLabelContent = true;
-
-  let labelX = 0;
-  let labelXBottom = 0;
-  let centerX = 0;
-  if (labelXCenter) {
-    if (index < arr.length - 1) {
-      const nextTick = arr[index + 1];
-      centerX = xScale(tick) + (xScale(nextTick) - xScale(tick)) / 2;
-    } else if (index > 0) {
-      const prevTick = arr[index - 1];
-      const spacing = xScale(tick) - xScale(prevTick);
-      centerX = xScale(tick) + spacing / 2;
-    } else {
-      centerX = xScale(tick);
-    }
-    labelX = centerX - labelWidth / 2;
-    labelXBottom = centerX - labelWidthBottom / 2;
-  } else {
-    labelX = xScale(tick) - (labelWidth ?? 0) / 2;
-    labelXBottom = xScale(tick) - (labelWidthBottom ?? 0) / 2;
-  }
-
+  const linePaint = useMemo(() => {
+    const paint = Skia.Paint();
+    paint.setColor(Skia.Color(lineColor));
+    paint.setStrokeWidth(lineWidth);
+    return paint;
+  }, [lineColor, lineWidth]);
+  const labelPaint = useMemo(() => {
+    const paint = Skia.Paint();
+    paint.setColor(Skia.Color(labelColor));
+    return paint;
+  }, [labelColor]);
+  const lineTop = yScale(y2);
+  const lineBottom = yScale(y1);
   const labelY = (() => {
     // bottom, outset
     if (axisSide === "bottom" && labelPosition === "outset") {
@@ -297,209 +170,164 @@ function TickGroup({
     // top, inset
     return yScale(y1) + fontSize + labelOffset;
   })();
-  // Calculate origin and translate for label rotation
-  const origin: SkPoint | undefined = undefined;
-  const actualClipPath = useMemo(() => {
-    return ignoreClip ? undefined : boundsToClip(chartBounds);
-  }, [ignoreClip, chartBounds]);
+  // Below the second label line, for the picture's bounds.
+  const axisBottom = labelY + SECOND_LINE_OFFSET + fontSize;
 
-  if (!visible) return null;
+  // Drawn on the UI thread from the scroll, so a fling never outruns the axis however busy JS is, and only near the
+  // plot, so the cost doesn't grow with the axis. Each frame finds the drawn ticks by binary search; the picture is
+  // recorded again only when a tick enters or leaves them.
+  const drawnStart = useDerivedValue(
+    () => getDrawnTickRange(tickXs, scrollXDerived.value, chartBounds)[0],
+  );
+  const drawnEnd = useDerivedValue(
+    () => getDrawnTickRange(tickXs, scrollXDerived.value, chartBounds)[1],
+  );
+  const picture = useDerivedValue(() => {
+    const start = drawnStart.value;
+    const end = drawnEnd.value;
+    if (start >= end) return createPicture(() => {});
 
-  const translateX =
-    index === 0 ? 10 : index === xTicksNormalized.length - 1 ? -4 : 0;
+    // Room for the labels either side of the outer ticks.
+    const labelRoom = chartBounds.right - chartBounds.left;
+    const pictureLeft = tickXs[start]! - labelRoom;
+    const pictureRight = tickXs[end - 1]! + labelRoom;
+    // Without bounds a picture covers only positive x, and older ticks sit far left of 0 in the content.
+    const bounds = Skia.XYWHRect(
+      pictureLeft,
+      0,
+      pictureRight - pictureLeft,
+      axisBottom,
+    );
+    return createPicture((canvas) => {
+      for (let index = start; index < end; index++) {
+        const x = tickXs[index]!;
+        if (lineWidth > 0) {
+          canvas.drawLine(x, lineTop, x, lineBottom, linePaint);
+        }
+        if (!font) continue;
+
+        const label = jsLabels
+          ? jsLabels[index]!
+          : formatXLabel(labelValues[index] as never);
+        const top = typeof label === "string" ? label : label.top;
+        const bottom = typeof label === "string" ? null : label.bottom;
+        const topWidth = getTextWidth(font, top);
+        if (!topWidth) continue;
+
+        const bottomWidth =
+          bottom && secondaryXFont ? getTextWidth(secondaryXFont, bottom) : 0;
+        let centerX = x;
+        if (labelXCenter) {
+          const next = tickXs[index + 1];
+          const previous = tickXs[index - 1];
+          centerX =
+            next !== undefined
+              ? (x + next) / 2
+              : previous !== undefined
+                ? x + (x - previous) / 2
+                : x;
+        }
+        // Nudge the first and last labels inward from the content's ends.
+        const nudge = index === 0 ? 10 : index === tickXs.length - 1 ? -4 : 0;
+        canvas.drawText(
+          top,
+          centerX - topWidth / 2 + nudge,
+          labelY,
+          labelPaint,
+          font,
+        );
+        if (bottom) {
+          canvas.drawText(
+            bottom,
+            centerX - bottomWidth / 2 + nudge,
+            labelY + SECOND_LINE_OFFSET,
+            labelPaint,
+            secondaryXFont || font,
+          );
+        }
+      }
+    }, bounds);
+  });
 
   return (
-    <Group key={`x-tick-${String(tick)}`} clip={actualClipPath}>
-      <Group transform={transformX}>
-        {lineWidth > 0 ? (
-          <Group>
-            <Line p1={p1} p2={p2} color={lineColor} strokeWidth={lineWidth} />
-          </Group>
-        ) : null}
-        {font && labelWidth && canFitLabelContent ? (
-          <Group>
-            <Text
-              transform={[{ translateX }]}
-              origin={origin}
-              color={labelColor}
-              text={contentX}
-              font={font}
-              y={labelY}
-              x={labelX}
-            />
-            {contentXBottom ? (
-              <Text
-                transform={[{ translateX }]}
-                origin={origin}
-                color={labelColor}
-                text={contentXBottom}
-                font={secondaryXFont || font}
-                y={labelY + 15}
-                x={labelXBottom}
-              />
-            ) : null}
-          </Group>
-        ) : null}
-      </Group>
+    <Group transform={transformX}>
+      <Picture picture={picture} />
     </Group>
   );
+};
+
+// The second label line's baseline, below the first's.
+const SECOND_LINE_OFFSET = 15;
+
+function defaultFormatXLabel(label: ValueOf<InputDatum>) {
+  "worklet";
+  return String(label);
 }
 
-function useProcessAndReportTicks<
+function getTextWidth(font: SkFont, text: string) {
+  "worklet";
+  return font
+    .getGlyphWidths(font.getGlyphIDs(text))
+    .reduce((sum, width) => sum + width, 0);
+}
+
+/** Reports the ticks in view to `onVisibleTicksChange` while the user scrolls, when they change. */
+function useReportVisibleTicks<
   RawData extends Record<string, unknown>,
   XK extends keyof InputFields<RawData>,
 >({
-  scrollX,
-  scrollXDerived,
+  tickXs,
+  labelValues,
   chartBounds,
-  xTicksNormalized,
-  onVisibleTicksChange,
-  uniqueValueIndices,
-  isNumericalData,
-  ix,
-  xScale,
+  scrollXDerived,
   isScrolling,
   labelXCenter,
+  onVisibleTicksChange,
 }: {
-  scrollX: SharedValue<number>;
-  ix: InputFields<RawData>[XK][];
-  xScale: Scale;
-  chartBounds: { left: number; right: number };
-  xTicksNormalized: number[];
-  onVisibleTicksChange?: (visibleTickData: Array<ValueOf<RawData[XK]>>) => void;
-  uniqueValueIndices: Map<string, number>;
-  isNumericalData: boolean;
+  tickXs: number[];
+  labelValues: unknown[];
+  chartBounds: ChartBounds;
   scrollXDerived: SharedValue<number>;
   isScrolling: SharedValue<boolean>;
   labelXCenter: boolean;
+  onVisibleTicksChange?: (visibleTickData: Array<ValueOf<RawData[XK]>>) => void;
 }) {
-  const scaleDomain = useMemo(() => xScale.domain(), [xScale]);
-  const scaleRange = useMemo(() => xScale.range(), [xScale]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keep sroll x
-  const handleProcessAndReportTicks = useMemo(() => {
-    return (ticksInRange: Array<number>) => {
-      if (!onVisibleTicksChange) return;
-      const actualVisibleData: Array<ValueOf<RawData[XK]>> = [];
-      ticksInRange.forEach((tick) => {
-        const numericTick = Number(tick);
-        if (Number.isNaN(numericTick)) return;
-        const indexPosition = uniqueValueIndices.get(String(tick)) ?? tick;
-        const dataValue = (
-          isNumericalData ? tick : ix[indexPosition as number]
-        ) as ValueOf<RawData[XK]>;
-        actualVisibleData.push(dataValue);
-      });
-      onVisibleTicksChange(actualVisibleData);
-    };
-  }, [
-    onVisibleTicksChange,
-    scrollX, // KEEP: Include scrollX to read latest value inside
-    uniqueValueIndices,
-    isNumericalData,
-    ix,
-  ]);
-
-  // Debounce the JS processing function
-  const debouncedProcessAndReportTicks = useMemo(() => {
-    return debounce(handleProcessAndReportTicks, 50); // Adjust debounce time (ms) as needed
-  }, [handleProcessAndReportTicks]);
+  const report = useMemo(
+    () =>
+      onVisibleTicksChange &&
+      debounce(
+        (start: number, end: number) =>
+          onVisibleTicksChange(
+            labelValues.slice(start, end) as Array<ValueOf<RawData[XK]>>,
+          ),
+        50,
+      ),
+    [onVisibleTicksChange, labelValues],
+  );
 
   useAnimatedReaction(
     () => {
-      // Prepare: Calculate first/last visible tick heuristic
-      "worklet";
-      const [d0, d1] = scaleDomain;
-      const [r0, r1] = scaleRange;
-      const domainSpan = d1 - d0;
-
-      const scaleWorklet = (value: number): number => {
-        if (domainSpan === 0) return r0;
-        return r0 + ((value - d0) / domainSpan) * (r1 - r0);
-      };
-
-      const chartBoundsRight = chartBounds.right;
-      const chartBoundsLeft = chartBounds.left;
-
-      const totalWidth = chartBoundsRight - chartBoundsLeft;
-      const renderWidth = totalWidth * 4;
-
-      let firstVisibleTick: ValueOf<RawData[XK]> | number | string | null =
-        null;
-      let lastVisibleTick: ValueOf<RawData[XK]> | number | string | null = null;
-      const ticksInRange: Array<number> = [];
-      const ticksInRangeWithBuffer: Array<number> = [];
-
-      for (const tick of xTicksNormalized) {
-        const numericTick = Number(tick);
-        if (Number.isNaN(numericTick)) continue;
-
-        const tickPixelX = scaleWorklet(numericTick);
-        const scrolledPixelX = tickPixelX + scrollXDerived.value;
-
-        // Optimization 1: Current tick is past the right buffered edge.
-        // If so, all subsequent ticks (in a sorted array) are also past, so we can stop.
-        if (scrolledPixelX > chartBoundsRight + renderWidth) {
-          break;
-        }
-
-        // Optimization 2: Current tick is before the left buffered edge.
-        // If so, this tick is not in the buffer or visible area. Skip to the next tick.
-        // Subsequent ticks might be in view, so we use 'continue' instead of 'break'.
-        if (scrolledPixelX < chartBoundsLeft - renderWidth) {
-          continue;
-        }
-
-        // If we reach here, the tick is within the renderable buffer zone:
-        // [chartBoundsLeft - renderWidth, chartBoundsRight + renderWidth]
-        // So, it should always be added to ticksInRangeWithBuffer.
-        // this is for the virtualization state
-        ticksInRangeWithBuffer.push(tick);
-
-        // Now, check if it's also within the strictly visible chartBounds for the callback.
-        const detectionOffset = labelXCenter ? 30 : 0;
-        if (
-          scrolledPixelX >= chartBoundsLeft - detectionOffset &&
-          scrolledPixelX <= chartBoundsRight - detectionOffset
-        ) {
-          ticksInRange.push(tick);
-          if (firstVisibleTick === null) {
-            firstVisibleTick = tick; // Found the first strictly visible tick
-          }
-          lastVisibleTick = tick; // Keep updating last strictly visible tick
-        }
-      }
-      // Return the heuristic value
-      return {
-        first: firstVisibleTick,
-        last: lastVisibleTick,
-        ticksInRange,
-        ticksInRangeWithBuffer,
-        isScrolling: isScrolling.value,
-      };
+      if (!report) return null;
+      const detectionOffset = labelXCenter ? 30 : 0;
+      return getTickRange(
+        tickXs,
+        chartBounds.left - detectionOffset - scrollXDerived.value,
+        chartBounds.right - detectionOffset - scrollXDerived.value,
+      );
     },
     (current, previous) => {
-      "worklet";
       if (
+        report &&
+        current &&
         isScrolling.value &&
         (previous === null ||
-          current.first !== previous.first ||
-          current.last !== previous.last)
+          current[0] !== previous[0] ||
+          current[1] !== previous[1])
       ) {
-        runOnJS(debouncedProcessAndReportTicks)(current.ticksInRange); // Call the debounced function
+        runOnJS(report)(current[0], current[1]);
       }
     },
-    // Dependencies for the reaction prepare block
-    [
-      labelXCenter,
-      scrollX,
-      scaleDomain,
-      scaleRange,
-      chartBounds,
-      xTicksNormalized,
-      debouncedProcessAndReportTicks,
-      isScrolling,
-    ], // Use debounced function in deps
+    [report, tickXs, chartBounds, labelXCenter, scrollXDerived, isScrolling],
   );
 }
 
