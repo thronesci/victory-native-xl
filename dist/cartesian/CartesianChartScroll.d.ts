@@ -60,6 +60,12 @@ type CartesianChartProps<RawData extends Record<string, unknown>, XK extends key
      */
     onScrollEnd?: (visibleXDomain: [number, number]) => void;
     /**
+     * Called when a released drag or fling starts decelerating onto `snapScrollEnd`'s rest, with the x values at the
+     * plot's edges there: what `onScrollEnd` will report, before the scroll gets there. A new drag can stop it short,
+     * and then `onScrollEnd` doesn't report.
+     */
+    onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
+    /**
      * Where a user scroll comes to rest, as a worklet: given the x value at the plot's right edge where a released drag
      * or fling would stop, the x value to stop at instead, such as the edge of a whole bar. The scroll decelerates onto
      * it, keeping a fling's momentum.

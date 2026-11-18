@@ -191,6 +191,7 @@ export const scrollTransformGesture = ({
   dimensions,
   onScroll,
   onScrollEnd,
+  onScrollEndTarget,
   snapScroll,
   scrollBounds,
   isScrolling,
@@ -202,6 +203,8 @@ export const scrollTransformGesture = ({
   onScroll?: (data: any) => void;
   /** Called on JS with the final `scrollX` once a user scroll's fling or spring-back comes to rest. */
   onScrollEnd?: (scrollX: number) => void;
+  /** Called on JS with the `scrollX` a released drag or fling will rest at, as it starts decelerating onto `snapScroll`'s. */
+  onScrollEndTarget?: (scrollX: number) => void;
   /**
    * Where a released drag or fling that would stop at `scrollX` rests instead. The scroll decelerates onto it; without
    * it, a fling decays with `withDecay` and rests anywhere.
@@ -289,6 +292,7 @@ export const scrollTransformGesture = ({
           ),
           maxScroll,
         );
+        if (onScrollEndTarget) runOnJS(onScrollEndTarget)(restingScroll);
         scrollX.value = withDecelerationTo(
           currentScroll,
           restingScroll,

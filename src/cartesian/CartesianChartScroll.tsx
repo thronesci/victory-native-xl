@@ -128,6 +128,12 @@ type CartesianChartProps<
    */
   onScrollEnd?: (visibleXDomain: [number, number]) => void;
   /**
+   * Called when a released drag or fling starts decelerating onto `snapScrollEnd`'s rest, with the x values at the
+   * plot's edges there: what `onScrollEnd` will report, before the scroll gets there. A new drag can stop it short,
+   * and then `onScrollEnd` doesn't report.
+   */
+  onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
+  /**
    * Where a user scroll comes to rest, as a worklet: given the x value at the plot's right edge where a released drag
    * or fling would stop, the x value to stop at instead, such as the edge of a whole bar. The scroll decelerates onto
    * it, keeping a fling's momentum.
@@ -192,6 +198,7 @@ function CartesianChartContent<
   scrollState,
   onScroll,
   onScrollEnd,
+  onScrollEndTarget,
   snapScrollEnd,
   onVisibleTicksChange,
   scrollControllerRef,
@@ -494,20 +501,30 @@ function CartesianChartContent<
   React.useLayoutEffect(() => {
     scrollEndGeometry.current = { dimensions, size, xScale, chartBounds };
   }, [dimensions, size, xScale, chartBounds]);
-  const handleScrollEnd = React.useMemo(() => {
-    if (!onScrollEnd) return undefined;
-    return (finalScrollX: number) => {
+  // The x values at the plot's edges with the chart scrolled to `scrollX`.
+  const getVisibleXDomain = React.useCallback(
+    (scrollX: number): [number, number] => {
       const { dimensions, size, xScale, chartBounds } =
         scrollEndGeometry.current;
-      // `scrollXDerived` at rest: a point's x plus it is where the point is drawn.
-      const offset =
-        finalScrollX - (dimensions.totalContentWidth || 0) + size.width;
-      onScrollEnd([
+      // `scrollXDerived` at `scrollX`: a point's x plus it is where the point is drawn.
+      const offset = scrollX - (dimensions.totalContentWidth || 0) + size.width;
+      return [
         xScale.invert(chartBounds.left - offset),
         xScale.invert(chartBounds.right - offset),
-      ]);
-    };
-  }, [onScrollEnd]);
+      ];
+    },
+    [],
+  );
+  const handleScrollEnd = React.useMemo(() => {
+    if (!onScrollEnd) return undefined;
+    return (finalScrollX: number) =>
+      onScrollEnd(getVisibleXDomain(finalScrollX));
+  }, [onScrollEnd, getVisibleXDomain]);
+  const handleScrollEndTarget = React.useMemo(() => {
+    if (!onScrollEndTarget) return undefined;
+    return (restingScrollX: number) =>
+      onScrollEndTarget(getVisibleXDomain(restingScrollX));
+  }, [onScrollEndTarget, getVisibleXDomain]);
 
   // `snapScrollEnd` in scroll offsets. A point is drawn at its x plus the scroll plus `drawnShift` (`scrollXDerived`).
   const snapScroll = React.useMemo(() => {
@@ -545,6 +562,7 @@ function CartesianChartContent<
           dimensions,
           onScroll,
           onScrollEnd: handleScrollEnd,
+          onScrollEndTarget: handleScrollEndTarget,
           snapScroll,
           scrollBounds,
           isScrolling,
@@ -561,6 +579,7 @@ function CartesianChartContent<
     scrollX,
     onScroll,
     handleScrollEnd,
+    handleScrollEndTarget,
     snapScroll,
     scrollBounds,
     isScrolling,

@@ -94,7 +94,12 @@ describe("scrollTransformGesture", () => {
     {
       velocityX = -2000,
       snapScroll,
-    }: { velocityX?: number; snapScroll?: (scrollX: number) => number } = {},
+      onScrollEndTarget,
+    }: {
+      velocityX?: number;
+      snapScroll?: (scrollX: number) => number;
+      onScrollEndTarget?: (scrollX: number) => void;
+    } = {},
   ) {
     const scrollX: { value: number | Animation } = { value: 0 };
     const scrollBounds = { value: bounds };
@@ -106,6 +111,7 @@ describe("scrollTransformGesture", () => {
       viewportWidth: 300,
       dimensions: { width: 300, totalContentWidth: 900 },
       onScrollEnd,
+      onScrollEndTarget,
       snapScroll,
       scrollBounds: scrollBounds as SharedValue<[number, number]>,
       isScrolling: isScrolling as SharedValue<boolean>,
@@ -179,6 +185,18 @@ describe("scrollTransformGesture", () => {
       expect(decay.config?.duration).toBeGreaterThan(0);
       settle(decay, 80);
       expect(onScrollEnd).toHaveBeenCalledWith(80);
+    });
+
+    it("reports where a fling will rest as the finger lifts, before it gets there", () => {
+      const onScrollEndTarget = vi.fn();
+      const { onScrollEnd } = fling([-80, 600], {
+        velocityX: 300,
+        snapScroll,
+        onScrollEndTarget,
+      });
+
+      expect(onScrollEndTarget).toHaveBeenCalledWith(80);
+      expect(onScrollEnd).not.toHaveBeenCalled();
     });
 
     it("decelerates with Reduce Motion on, rather than jumping to where it rests", () => {
