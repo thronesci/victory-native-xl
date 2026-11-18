@@ -192,8 +192,9 @@ const isFiniteDomain = (domain: [number, number]) => {
  * end exactly there. It moves through x values and maps each frame to the chart's current scroll offsets, so a
  * remeasure as it settles (data loading, a wider y label) neither moves it off `toX` nor turns it back on screen. While
  * `toX` stays inside the limits it stays the target. When a limit contracts past it, `pickRestX` picks again inside
- * the new limits, and the scroll curves there from where it is, at the speed it's moving, without passing the limit;
- * `onRepick` hears the new x value.
+ * the new limits, and the scroll curves there from where the last frame drew it, at the speed it's moving, without
+ * passing the limit. `onTarget` hears the x values at the plot's edges where it will rest whenever either moves by more
+ * than half a pixel from what it last heard, as a new pick or a remeasure can move them.
  *
  * As with UIKit's adjusted target content offset, a fling keeps its momentum and only where it rests moves: it starts
  * at its release `velocity`, slowing harder to rest short of where its momentum would stop, or longer to rest past
@@ -210,7 +211,8 @@ const withDecelerationTo = ({
   toX,
   velocity,
   pickRestX,
-  onRepick,
+  reported,
+  onTarget,
   callback,
 }: {
   geometry: ScrollGeometry;
@@ -218,7 +220,9 @@ const withDecelerationTo = ({
   toX: number;
   velocity: number;
   pickRestX: (stopScroll: number) => number;
-  onRepick?: (restX: number) => void;
+  /** The x values `onTarget` last heard, at release. */
+  reported: [number, number];
+  onTarget?: (visibleXDomain: [number, number]) => void;
   callback: AnimationCallback;
 }): number => {
   "worklet";
@@ -266,6 +270,26 @@ const withDecelerationTo = ({
           ? 0
           : (timeConstants * Math.abs(distance)) / (startSpeed * settled);
     };
+    // Tells `onTarget` where it will rest when that moves by more than a pixel's x values at either edge.
+    const reportTarget = (animation: AnimationObject<number>) => {
+      "worklet";
+      const toScroll = scrollWithin(geometry.scrollAt(animation.toX));
+      const domain = geometry.visibleXDomainAt(toScroll);
+      const halfPixelX = Math.abs(
+        geometry.rightEdgeXAt(toScroll + REACH_TOLERANCE) -
+          geometry.rightEdgeXAt(toScroll),
+      );
+      const [left, right] = animation.reported;
+      if (
+        onTarget &&
+        isFiniteDomain(domain) &&
+        Math.max(Math.abs(domain[0] - left), Math.abs(domain[1] - right)) >
+          halfPixelX
+      ) {
+        animation.reported = domain;
+        onTarget(domain);
+      }
+    };
 
     return {
       isHigherOrder: true,
@@ -275,6 +299,8 @@ const withDecelerationTo = ({
         now: number,
       ) => {
         aim(animation, from, toX, velocity / 1000, now);
+        animation.reported = reported;
+        animation.lastX = animation.fromX;
         animation.current = from;
       },
       onFrame: (animation: AnimationObject<number>, now: number) => {
@@ -286,10 +312,6 @@ const withDecelerationTo = ({
           durationMs > 0
             ? Math.min(1, (now - animation.startTime) / durationMs)
             : 1;
-        const travelled = (1 - Math.exp(-timeConstants * progress)) / settled;
-        const scroll = geometry.scrollAt(
-          fromX + (animation.toX - fromX) * travelled,
-        );
 
         const toScroll = geometry.scrollAt(animation.toX);
         // Converting an x value at a limit back to offsets can land a rounding error past it, which isn't a contraction.
@@ -299,8 +321,10 @@ const withDecelerationTo = ({
           ? pickRestX(scrollWithin(toScroll))
           : Number.NaN;
         const repickedScroll = geometry.scrollAt(repickedX);
+        // Where the last frame drew it, in the current geometry, inside a limit that's overtaken it.
+        const lastScroll = scrollWithin(geometry.scrollAt(animation.lastX));
         if (
-          Number.isFinite(scroll) &&
+          Number.isFinite(lastScroll) &&
           Number.isFinite(repickedScroll) &&
           Math.abs(repickedScroll - toScroll) > REACH_TOLERANCE
         ) {
@@ -312,15 +336,28 @@ const withDecelerationTo = ({
                   Math.exp(-timeConstants * progress)) /
                 (settled * durationMs)
               : 0;
-          aim(animation, scroll, repickedX, speed, now);
-          onRepick?.(repickedX);
-          animation.current = scroll;
+          aim(animation, lastScroll, repickedX, speed, now);
+          reportTarget(animation);
+          animation.lastX = animation.fromX;
+          animation.current = lastScroll;
           return false;
         }
 
-        const nextScroll = progress === 1 ? scrollWithin(toScroll) : scroll;
+        reportTarget(animation);
+        const x =
+          progress === 1
+            ? animation.toX
+            : fromX +
+              ((animation.toX - fromX) *
+                (1 - Math.exp(-timeConstants * progress))) /
+                settled;
+        const scroll =
+          progress === 1 ? scrollWithin(toScroll) : geometry.scrollAt(x);
         // A remeasure that loses the chart's x values holds the last frame.
-        if (Number.isFinite(nextScroll)) animation.current = nextScroll;
+        if (Number.isFinite(scroll)) {
+          animation.current = scroll;
+          animation.lastX = x;
+        }
         return progress === 1;
       },
       current: from,
@@ -367,7 +404,6 @@ export const scrollTransformGesture = ({
   onScrollEndTarget,
   scrollGeometry,
   snapScrollEnd,
-  scrollBounds,
   isScrolling,
 }: {
   scrollX: SharedValue<number>;
@@ -385,6 +421,10 @@ export const scrollTransformGesture = ({
    * plot's edges there, worked out at release. Not called for a pan the system cancels.
    */
   onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
+  /**
+   * The plot's scale and scroll limits, published together. A fling outlives the render that started it, so it reads
+   * them as it settles; the limits come only from here, so they always match the scale.
+   */
   scrollGeometry: ScrollGeometry;
   /**
    * Where a released drag or fling rests: given the x value at the plot's right edge where it would stop, inside the
@@ -393,8 +433,6 @@ export const scrollTransformGesture = ({
    * values, a fling decays with `withDecay` and rests anywhere.
    */
   snapScrollEnd?: (rightEdgeX: number, reachable: [number, number]) => number;
-  /** The current `getScrollBounds`. A fling outlives the render that started it, so it reads them as it settles. */
-  scrollBounds: SharedValue<[number, number]>;
   isScrolling: SharedValue<boolean>;
 }): PanGesture => {
   // A cancelled animation (by the next pan, or a programmatic scroll) is not the end of this scroll.
@@ -410,7 +448,7 @@ export const scrollTransformGesture = ({
     "worklet";
     // The bounds can contract while a fling settles (shorter data, a smaller `maxScrollOffset`), so it returns into
     // them before reporting where it rests.
-    const [minScroll, maxScroll] = scrollBounds.value;
+    const [minScroll, maxScroll] = scrollGeometry.limits();
     const restingScroll = Math.min(
       Math.max(scrollX.value, minScroll),
       maxScroll,
@@ -467,7 +505,7 @@ export const scrollTransformGesture = ({
     .onUpdate((e) => {
       isScrolling.value = true;
       // For reversed scroll: minScroll is negative (end/newest), maxScroll is positive (start/oldest)
-      const [minScroll, maxScroll] = scrollBounds.value;
+      const [minScroll, maxScroll] = scrollGeometry.limits();
 
       const potentialNewValue = prevTranslateX.value + e.translationX;
       const rubberBandFactor = 0.55;
@@ -513,23 +551,22 @@ export const scrollTransformGesture = ({
         return;
       }
       // Reports where it will rest, unless the system cancelled the pan.
-      const reportTarget = (targetX: number) => {
-        "worklet";
-        const domain = scrollGeometry.visibleXDomainAt(
-          scrollWithin(scrollGeometry.scrollAt(targetX)),
-        );
-        if (success && onScrollEndTarget && isFiniteDomain(domain)) {
-          runOnJS(onScrollEndTarget)(domain);
-        }
-      };
-      reportTarget(restX);
+      const onTarget =
+        success && onScrollEndTarget
+          ? (domain: [number, number]) => {
+              "worklet";
+              runOnJS(onScrollEndTarget)(domain);
+            }
+          : undefined;
+      onTarget?.(restDomain);
       scrollX.value = withDecelerationTo({
         geometry: scrollGeometry,
         from: currentScroll,
         toX: restX,
         velocity,
         pickRestX: getRestX,
-        onRepick: reportTarget,
+        reported: restDomain,
+        onTarget,
         callback: endScroll,
       });
     });

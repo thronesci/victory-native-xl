@@ -132,8 +132,9 @@ type CartesianChartProps<
   onScrollEnd?: (visibleXDomain: [number, number]) => void;
   /**
    * Called when a released drag or fling starts settling onto `snapScrollEnd`'s rest, with the x values at the plot's
-   * edges there, worked out at release: what `onScrollEnd` will report, before the scroll gets there. A new drag can
-   * stop it short, and then `onScrollEnd` doesn't report. Not called for a pan the system cancels.
+   * edges there: what `onScrollEnd` will report, before the scroll gets there. It can be called again during the same
+   * settle, with the latest range, when a remeasure moves either edge or a contracting limit makes it pick another
+   * rest. A new drag can stop it short, and then `onScrollEnd` doesn't report. Not called for a pan the system cancels.
    */
   onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
   /**
@@ -329,7 +330,8 @@ function CartesianChartContent<
   const scrollX = useSharedValue(maxScrollOffset ? -maxScrollOffset : 0);
   const isScrolling = useSharedValue(false);
   const prevTranslateX = useSharedValue(0);
-  const scrollBounds = useCartesianScrollHandler({
+  // Keeps a resting scroll inside contracted bounds; the gesture reads its limits from `scrollSnapshot`.
+  useCartesianScrollHandler({
     data,
     dimensions,
     scrollX,
@@ -587,7 +589,6 @@ function CartesianChartContent<
           onScrollEndTarget,
           scrollGeometry,
           snapScrollEnd,
-          scrollBounds,
           isScrolling,
         }),
       );
@@ -605,7 +606,6 @@ function CartesianChartContent<
     onScrollEndTarget,
     scrollGeometry,
     snapScrollEnd,
-    scrollBounds,
     isScrolling,
   ]);
 

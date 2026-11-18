@@ -129,11 +129,12 @@ describe("getScrollSnapshot", () => {
 
 describe("scrollTransformGesture", () => {
   /**
-   * A 300 px plot whose right edge's x value is its scroll offset plus `shift`. A remeasure (data loading, a wider y
-   * label) changes `shift`; `NaN` stands for a chart with no finite x values, such as one whose data is empty.
+   * A plot whose right edge's x value is its scroll offset plus `shift`, and that spans `width` x values (300 unless
+   * set). A remeasure (data loading, a wider y label) changes them; a `NaN` shift stands for a chart with no finite x
+   * values, such as one whose data is empty. The limits are the chart's published `scrollBounds`.
    */
   function geometryFor(
-    geometry: { shift: number },
+    geometry: { shift: number; width?: number },
     limits: () => [number, number],
   ): ScrollGeometry {
     return {
@@ -141,7 +142,7 @@ describe("scrollTransformGesture", () => {
       rightEdgeXAt: (scroll) => scroll + geometry.shift,
       scrollAt: (rightEdgeX) => rightEdgeX - geometry.shift,
       visibleXDomainAt: (scroll) => [
-        scroll + geometry.shift - 300,
+        scroll + geometry.shift - (geometry.width ?? 300),
         scroll + geometry.shift,
       ],
     };
@@ -156,13 +157,10 @@ describe("scrollTransformGesture", () => {
     bounds: [number, number],
     {
       geometry = { shift: 0 },
-      snapshotLimits,
       snapScrollEnd,
       onScrollEndTarget,
     }: {
-      geometry?: { shift: number };
-      /** The limits published with the scale, when they differ from `scrollBounds` (which updates later). */
-      snapshotLimits?: [number, number];
+      geometry?: { shift: number; width?: number };
       snapScrollEnd?: (
         rightEdgeX: number,
         reachable: [number, number],
@@ -181,12 +179,8 @@ describe("scrollTransformGesture", () => {
       dimensions: { width: 300, totalContentWidth: 900 },
       onScrollEnd,
       onScrollEndTarget,
-      scrollGeometry: geometryFor(
-        geometry,
-        () => snapshotLimits ?? scrollBounds.value,
-      ),
+      scrollGeometry: geometryFor(geometry, () => scrollBounds.value),
       snapScrollEnd,
-      scrollBounds: scrollBounds as SharedValue<[number, number]>,
       isScrolling: isScrolling as SharedValue<boolean>,
     });
     // A drag from where the chart rests, released at `velocityX`. The system cancels the pan when `success` is false.
@@ -467,12 +461,11 @@ describe("scrollTransformGesture", () => {
       expect(restedAtMs).toBeLessThan(1500);
     });
 
-    it("picks where a release rests from the limits published with the scale, though the scroll bounds haven't caught up", () => {
+    it("picks where a release rests inside the limits published with the scale", () => {
       const onScrollEndTarget = vi.fn();
       const snapScrollEnd = vi.fn(snapToBars);
-      const { decay } = fling([-80, 600], {
+      const { decay } = fling([-80, 52.5], {
         velocityX: 2000,
-        snapshotLimits: [-80, 52.5],
         snapScrollEnd,
         onScrollEndTarget,
       });
@@ -480,6 +473,81 @@ describe("scrollTransformGesture", () => {
       expect(snapScrollEnd).toHaveBeenCalledWith(52.5, [-80, 52.5]);
       expect(onScrollEndTarget.mock.calls).toEqual([[[-260, 40]]]);
       expect(runToRest(decay, 0).restingScroll).toBe(40);
+    });
+
+    it("re-aims from the last frame it drew, without passing a limit that contracts between frames", () => {
+      const onScrollEndTarget = vi.fn();
+      const scrolls: number[] = [];
+      let contracted = false;
+      const { scrollBounds, decay } = fling([-80, 600], {
+        velocityX: -2000,
+        snapScrollEnd: (rightEdgeX, [first, last]) =>
+          Math.min(Math.max(Math.round(rightEdgeX / 5) * 5, first), last),
+        onScrollEndTarget,
+      });
+
+      const { restingScroll } = runToRest(
+        decay,
+        0,
+        (now) => {
+          // Between the frame drawn at -26.5 and the next one the old curve would draw, at -44.5.
+          if (now === 32) {
+            scrollBounds.value = [-36, 600];
+            contracted = true;
+          }
+        },
+        (scroll) => {
+          if (contracted) scrolls.push(scroll);
+        },
+      );
+
+      expect(onScrollEndTarget.mock.calls).toEqual([
+        [[-380, -80]],
+        [[-335, -35]],
+      ]);
+      expect(restingScroll).toBe(-35);
+      for (const scroll of scrolls) expect(scroll).toBeGreaterThanOrEqual(-36);
+    });
+
+    it("reports the range again when a remeasure moves its far edge, and rests on the range it last reported", () => {
+      const geometry = { shift: 0, width: 300 };
+      const onScrollEndTarget = vi.fn();
+      const { onScrollEnd, decay, settle } = fling([-80, 600], {
+        velocityX: 300,
+        geometry,
+        snapScrollEnd: snapToBars,
+        onScrollEndTarget,
+      });
+
+      // Data that grows widens the plot's x values; the right edge it picked stays reachable.
+      const { restingScroll } = runToRest(decay, 0, (now) => {
+        if (now === 160) geometry.width = 310;
+      });
+      settle(decay, restingScroll ?? Number.NaN);
+
+      expect(onScrollEndTarget.mock.calls).toEqual([
+        [[-220, 80]],
+        [[-230, 80]],
+      ]);
+      expect(onScrollEnd.mock.calls).toEqual([[[-230, 80]]]);
+    });
+
+    it("reports the place it reached once, without springing to an outdated limit, when the limits grow as it finishes", () => {
+      const onScrollEndTarget = vi.fn();
+      const { scrollBounds, onScrollEnd, decay, settle } = fling([-80, 600], {
+        velocityX: 2000,
+        snapScrollEnd: snapToBars,
+        onScrollEndTarget,
+      });
+
+      const { restingScroll } = runToRest(decay, 0, (now) => {
+        if (now === 480) scrollBounds.value = [-80, 900];
+      });
+      const afterSettle = settle(decay, restingScroll ?? Number.NaN);
+
+      expect(restingScroll).toBe(480);
+      expect(afterSettle).toBe(480);
+      expect(onScrollEnd.mock.calls).toEqual([[[180, 480]]]);
     });
 
     it("drops the momentum and reports nothing at release when the system cancels the pan", () => {
