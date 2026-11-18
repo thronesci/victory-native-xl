@@ -51,8 +51,8 @@ export const XAxis = <
   const xTicksNormalized = tickValues
     ? downsampleTicks(tickValues, tickCount)
     : enableRescaling
-    ? xScale.ticks(tickCount)
-    : xScaleProp.ticks(tickCount);
+      ? xScale.ticks(tickCount)
+      : xScaleProp.ticks(tickCount);
 
   const xAxisNodes = xTicksNormalized.map((tick, index, arr) => {
     const p1 = vec(xScale(tick), yScale(y2));
@@ -220,7 +220,11 @@ export const XAxisDefaults = {
   axisSide: "bottom",
   yAxisSide: "left",
   labelPosition: "outset",
-  formatXLabel: (label: ValueOf<InputDatum>) => String(label),
+  // A worklet: a scroll axis with `getXTicks` labels its ticks on the UI thread.
+  formatXLabel: (label: ValueOf<InputDatum>) => {
+    "worklet";
+    return String(label);
+  },
   labelColor: "#000000",
   labelRotate: 0,
 } satisfies XAxisPropsWithDefaults<never, never>;

@@ -79,8 +79,8 @@ export function ChartAxis({
           const rescaledTicks = axis.tickValues
             ? downsampleTicks(axis.tickValues, axis.tickCount)
             : axis.enableRescaling
-            ? rescaled.ticks(axis.tickCount)
-            : yAxis.yScale.ticks(axis.tickCount);
+              ? rescaled.ticks(axis.tickCount)
+              : yAxis.yScale.ticks(axis.tickCount);
 
           const primaryTicksRescaled = primaryAxisProps.tickValues
             ? downsampleTicks(
@@ -88,8 +88,8 @@ export function ChartAxis({
                 primaryAxisProps.tickCount,
               )
             : primaryAxisProps.enableRescaling
-            ? primaryRescaled.ticks(primaryAxisProps.tickCount)
-            : primaryYScale.ticks(primaryAxisProps.tickCount);
+              ? primaryRescaled.ticks(primaryAxisProps.tickCount)
+              : primaryYScale.ticks(primaryAxisProps.tickCount);
 
           return (
             <YAxis
@@ -142,6 +142,7 @@ export function ChartAxis({
             onVisibleTicksChange={onVisibleTicksChange}
             secondaryXFont={axisOptions.secondaryXFont}
             labelXCenter={axisOptions.labelXCenter}
+            getXTicks={axisOptions.getXTicks}
             scrollXDerived={scrollXDerived}
             isScrolling={isScrolling}
           />
