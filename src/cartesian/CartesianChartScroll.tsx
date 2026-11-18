@@ -54,6 +54,7 @@ import {
   type PanTransformGestureConfig,
   pinchTransformGesture,
   type PinchTransformGestureConfig,
+  getScrollSnapshot,
   type ScrollGeometry,
   scrollTransformGesture,
 } from "./utils/transformGestures";
@@ -500,57 +501,61 @@ function CartesianChartContent<
       />
     ) : null;
 
-  // The plot's geometry for worklets that outlast a render, such as a settling fling or its report: a point at x is
-  // drawn at `rangeStart + (x - domainStart) * pixelsPerX`, plus the scroll, plus `drawnShift` (`scrollXDerived`).
-  // With no data or a zero-width domain there's no scale, and the worklets give no finite x value.
-  const scrollGeometryValues = useSharedValue({
+  // The plot's scale and scroll limits for worklets that outlast a render, such as a settling fling or its report,
+  // published as one snapshot in one write (`getScrollSnapshot`).
+  const scrollSnapshot = useSharedValue<ReturnType<typeof getScrollSnapshot>>({
     domainStart: 0,
     rangeStart: 0,
     pixelsPerX: Number.NaN,
     plotLeft: 0,
     plotRight: 0,
     drawnShift: 0,
+    limits: [0, 0],
   });
   React.useLayoutEffect(() => {
     const [domainStart = 0, domainEnd = 0] = xScale.domain();
     const [rangeStart = 0, rangeEnd = 0] = xScale.range();
-    const pixelsPerX = (rangeEnd - rangeStart) / (domainEnd - domainStart);
-    scrollGeometryValues.value = {
-      domainStart,
-      rangeStart,
-      pixelsPerX:
-        Number.isFinite(pixelsPerX) && pixelsPerX !== 0
-          ? pixelsPerX
-          : Number.NaN,
+    scrollSnapshot.value = getScrollSnapshot({
+      xDomain: [domainStart, domainEnd],
+      xRange: [rangeStart, rangeEnd],
       plotLeft: chartBounds.left,
       plotRight: chartBounds.right,
-      drawnShift: size.width - (dimensions.totalContentWidth || 0),
-    };
+      canvasWidth: size.width,
+      dimensions,
+      maxScrollOffset,
+      hasSamples: data.length > 0,
+    });
   }, [
-    scrollGeometryValues,
+    scrollSnapshot,
     xScale,
     chartBounds.left,
     chartBounds.right,
     size.width,
-    dimensions.totalContentWidth,
+    dimensions,
+    maxScrollOffset,
+    data.length,
   ]);
   const scrollGeometry = React.useMemo<ScrollGeometry>(() => {
     const xAt = (pixel: number, scroll: number) => {
       "worklet";
-      const g = scrollGeometryValues.value;
+      const g = scrollSnapshot.value;
       return (
         g.domainStart +
         (pixel - scroll - g.drawnShift - g.rangeStart) / g.pixelsPerX
       );
     };
     return {
+      limits: () => {
+        "worklet";
+        return scrollSnapshot.value.limits;
+      },
       rightEdgeXAt: (scroll) => {
         "worklet";
-        return xAt(scrollGeometryValues.value.plotRight, scroll);
+        return xAt(scrollSnapshot.value.plotRight, scroll);
       },
       scrollAt: (rightEdgeX) => {
         "worklet";
-        const g = scrollGeometryValues.value;
+        const g = scrollSnapshot.value;
         return (
           g.plotRight -
           g.drawnShift -
@@ -560,11 +565,11 @@ function CartesianChartContent<
       },
       visibleXDomainAt: (scroll) => {
         "worklet";
-        const g = scrollGeometryValues.value;
+        const g = scrollSnapshot.value;
         return [xAt(g.plotLeft, scroll), xAt(g.plotRight, scroll)];
       },
     };
-  }, [scrollGeometryValues]);
+  }, [scrollSnapshot]);
 
   // Memoize the composed gesture
   const composedGesture = React.useMemo(() => {

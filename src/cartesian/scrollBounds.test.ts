@@ -3,6 +3,7 @@ import type { SharedValue } from "react-native-reanimated";
 import {
   getContractedScroll,
   getScrollBounds,
+  getScrollSnapshot,
   type ScrollGeometry,
   scrollTransformGesture,
 } from "./utils/transformGestures";
@@ -89,13 +90,54 @@ describe("getContractedScroll", () => {
   });
 });
 
+describe("getScrollSnapshot", () => {
+  const plot = {
+    xDomain: [0, 100] as [number, number],
+    xRange: [10, 1010] as [number, number],
+    plotLeft: 10,
+    plotRight: 310,
+    canvasWidth: 300,
+    dimensions: { width: 300, totalContentWidth: 1000 },
+    maxScrollOffset: 30,
+  };
+
+  it("publishes the scale with the scroll limits it was laid out with", () => {
+    expect(getScrollSnapshot({ ...plot, hasSamples: true })).toEqual({
+      domainStart: 0,
+      rangeStart: 10,
+      pixelsPerX: 10,
+      plotLeft: 10,
+      plotRight: 310,
+      drawnShift: -700,
+      limits: getScrollBounds(plot.dimensions, 30),
+    });
+  });
+
+  it("gives no scale while the chart has no samples, though fixed axes keep its domain", () => {
+    expect(
+      getScrollSnapshot({ ...plot, hasSamples: false }).pixelsPerX,
+    ).toBeNaN();
+  });
+
+  it("gives no scale for a zero-width domain", () => {
+    expect(
+      getScrollSnapshot({ ...plot, xDomain: [10, 10], hasSamples: true })
+        .pixelsPerX,
+    ).toBeNaN();
+  });
+});
+
 describe("scrollTransformGesture", () => {
   /**
    * A 300 px plot whose right edge's x value is its scroll offset plus `shift`. A remeasure (data loading, a wider y
    * label) changes `shift`; `NaN` stands for a chart with no finite x values, such as one whose data is empty.
    */
-  function geometryFor(geometry = { shift: 0 }): ScrollGeometry {
+  function geometryFor(
+    geometry: { shift: number },
+    limits: () => [number, number],
+  ): ScrollGeometry {
     return {
+      limits,
       rightEdgeXAt: (scroll) => scroll + geometry.shift,
       scrollAt: (rightEdgeX) => rightEdgeX - geometry.shift,
       visibleXDomainAt: (scroll) => [
@@ -114,10 +156,13 @@ describe("scrollTransformGesture", () => {
     bounds: [number, number],
     {
       geometry = { shift: 0 },
+      snapshotLimits,
       snapScrollEnd,
       onScrollEndTarget,
     }: {
       geometry?: { shift: number };
+      /** The limits published with the scale, when they differ from `scrollBounds` (which updates later). */
+      snapshotLimits?: [number, number];
       snapScrollEnd?: (
         rightEdgeX: number,
         reachable: [number, number],
@@ -136,7 +181,10 @@ describe("scrollTransformGesture", () => {
       dimensions: { width: 300, totalContentWidth: 900 },
       onScrollEnd,
       onScrollEndTarget,
-      scrollGeometry: geometryFor(geometry),
+      scrollGeometry: geometryFor(
+        geometry,
+        () => snapshotLimits ?? scrollBounds.value,
+      ),
       snapScrollEnd,
       scrollBounds: scrollBounds as SharedValue<[number, number]>,
       isScrolling: isScrolling as SharedValue<boolean>,
@@ -369,6 +417,69 @@ describe("scrollTransformGesture", () => {
 
       expect(onScrollEndTarget.mock.calls).toEqual([[[-190, 110]]]);
       expect(runToRest(decay, 0).restingScroll).toBe(110);
+    });
+
+    it("picks a reachable bar again when a limit contracts past its bar, and curves there without passing the limit", () => {
+      const onScrollEndTarget = vi.fn();
+      const scrolls: number[] = [];
+      const { scrollBounds, decay } = fling([-80, 600], {
+        velocityX: -400,
+        // Rests on 5 px bars inside the limits.
+        snapScrollEnd: (rightEdgeX, [first, last]) =>
+          Math.min(Math.max(Math.round(rightEdgeX / 5) * 5, first), last),
+        onScrollEndTarget,
+      });
+
+      const { restingScroll } = runToRest(
+        decay,
+        0,
+        (now) => {
+          if (now === 32) scrollBounds.value = [-20, 600];
+        },
+        (scroll) => scrolls.push(scroll),
+      );
+
+      expect(onScrollEndTarget.mock.calls).toEqual([
+        [[-380, -80]],
+        [[-320, -20]],
+      ]);
+      expect(restingScroll).toBe(-20);
+      for (const [index, scroll] of scrolls.entries()) {
+        expect(scroll).toBeGreaterThanOrEqual(-20);
+        expect(scroll).toBeLessThanOrEqual(scrolls[index - 1] ?? scroll);
+      }
+    });
+
+    it("rests on a bar at a limit, reported once, though converting it to offsets lands a rounding error past the limit", () => {
+      // Epoch-sized x values: -0.7 to x and back gives -0.7000000476837158, just past the limit.
+      const onScrollEndTarget = vi.fn();
+      const { decay } = fling([-0.7, 600], {
+        velocityX: -2000,
+        geometry: { shift: 1_000_000_000.1 },
+        snapScrollEnd: (_rightEdgeX, [newest]) => newest,
+        onScrollEndTarget,
+      });
+
+      const { restingScroll, restedAtMs } = runToRest(decay, 0);
+
+      expect(onScrollEndTarget).toHaveBeenCalledTimes(1);
+      expect(restingScroll).toBe(-0.7);
+      expect(restedAtMs).toBeLessThan(1500);
+    });
+
+    it("picks where a release rests from the limits published with the scale, though the scroll bounds haven't caught up", () => {
+      const onScrollEndTarget = vi.fn();
+      const snapScrollEnd = vi.fn(snapToBars);
+      const { decay } = fling([-80, 600], {
+        velocityX: 2000,
+        snapshotLimits: [-80, 52.5],
+        snapScrollEnd,
+        onScrollEndTarget,
+      });
+
+      expect(snapScrollEnd).toHaveBeenCalledWith(52.5, [-80, 52.5]);
+      expect(onScrollEndTarget.mock.calls).toEqual([[[-260, 40]]]);
+      expect(runToRest(decay, 0).restingScroll).toBe(40);
     });
 
     it("drops the momentum and reports nothing at release when the system cancels the pan", () => {
