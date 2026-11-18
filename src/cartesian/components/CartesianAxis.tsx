@@ -249,7 +249,11 @@ export const CartesianAxisDefaultProps = {
   labelOffset: { x: 2, y: 4 },
   axisSide: { x: "bottom", y: "left" },
   labelPosition: "outset",
-  formatXLabel: (label: ValueOf<InputDatum>) => String(label),
+  // A worklet: a scroll axis with `getXTicks` labels its ticks on the UI thread.
+  formatXLabel: (label: ValueOf<InputDatum>) => {
+    "worklet";
+    return String(label);
+  },
   formatYLabel: (label: ValueOf<InputDatum>) => String(label),
   labelColor: "#000000",
   ix: [],

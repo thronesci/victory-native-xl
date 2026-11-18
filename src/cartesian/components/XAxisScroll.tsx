@@ -10,6 +10,7 @@ import {
 import {
   isWorkletFunction,
   runOnJS,
+  type DerivedValue,
   type SharedValue,
   useDerivedValue,
   useAnimatedReaction,
@@ -17,9 +18,11 @@ import {
 
 import {
   DEFAULT_TICK_COUNT,
-  downsampleTicks,
   getDrawnRange,
-  getTickRange,
+  getFixedTicks,
+  getPageTicks,
+  getTicksIn,
+  type PageTickSource,
 } from "../../utils/tickHelpers";
 import type {
   ChartBounds,
@@ -96,16 +99,15 @@ export const MemoizedXAxis = <
   const [y1 = 0, y2 = 0] = yScale.domain();
   const fontSize = font?.getSize() ?? 0;
 
-  // Use tickValues if provided, otherwise generate ticks. With `getXTicks` the axis asks for them as it scrolls instead.
+  // Use tickValues if provided, otherwise generate ticks, ascending. With `getXTicks` the axis asks for them as it
+  // scrolls instead.
   const xTicksNormalized = useMemo(
     () =>
       getXTicks
         ? []
-        : tickValues
-          ? downsampleTicks(tickValues, tickCount)
-          : enableRescaling
-            ? xScale.ticks(tickCount)
-            : xScaleProp.ticks(tickCount),
+        : getFixedTicks(tickValues, tickCount, (count) =>
+            (enableRescaling ? xScale : xScaleProp).ticks(count),
+          ),
     [getXTicks, tickValues, tickCount, enableRescaling, xScale, xScaleProp],
   );
   // Each tick's x in the scrolling content, which `transformX` moves. Ticks are ascending, so these are too. Typed
@@ -129,7 +131,8 @@ export const MemoizedXAxis = <
     );
   }, [isNumericalData, xTicksNormalized, ix]);
   // A worklet formats each label on the UI thread as its tick scrolls into view. Any other formatter can only run on
-  // JS, so it formats every tick here, which is fine for the few ticks such charts pass.
+  // JS, so it formats every fixed tick here, which is fine for the few ticks such charts pass, and labels no generated
+  // tick.
   const jsLabels = useMemo(
     () =>
       isWorkletFunction(formatXLabel)
@@ -137,16 +140,6 @@ export const MemoizedXAxis = <
         : Array.from(labelValues, (value) => formatXLabel(value as never)),
     [formatXLabel, labelValues],
   );
-
-  useReportVisibleTicks({
-    tickXs,
-    labelValues,
-    chartBounds,
-    scrollXDerived,
-    isScrolling,
-    labelXCenter,
-    onVisibleTicksChange,
-  });
 
   const linePaint = useMemo(() => {
     const paint = Skia.Paint();
@@ -185,9 +178,16 @@ export const MemoizedXAxis = <
   const [rangeStart = 0, rangeEnd = 1] = xScale.range();
   const xPerValue = (rangeEnd - rangeStart) / (domainEnd - domainStart);
   const xOffset = rangeStart - domainStart * xPerValue;
-  // The data's ends, where the first and last labels sit.
   const firstValue = Number(ix[0]);
   const lastValue = Number(ix[ix.length - 1]);
+  // Memoized, as the worklets below restart when an object they capture changes.
+  const source = useMemo(
+    (): PageTickSource<unknown> =>
+      getXTicks
+        ? { getXTicks, xOffset, xPerValue, firstValue, lastValue }
+        : { tickXs, values: labelValues },
+    [getXTicks, xOffset, xPerValue, firstValue, lastValue, tickXs, labelValues],
+  );
 
   // Drawn on the UI thread from the scroll, so a fling never outruns the axis however busy JS is, and only around the
   // plot (`getDrawnRange`), so the cost doesn't grow with the axis. `drawnFrom` is a number, which notifies only when
@@ -198,39 +198,21 @@ export const MemoizedXAxis = <
   const drawnTo = useDerivedValue(
     () => getDrawnRange(scrollXDerived.value, chartBounds)[1],
   );
+  // The page's ticks, which the picture draws and `onVisibleTicksChange` reports from.
   const drawn = useDerivedValue(() => {
-    const from = drawnFrom.value;
-    const to = drawnTo.value;
-    const xs: number[] = [];
-    const labels: (string | { top: string; bottom: string })[] = [];
-    if (getXTicks) {
-      const fromValue = (from - xOffset) / xPerValue;
-      const toValue = (to - xOffset) / xPerValue;
-      for (const tick of getXTicks(fromValue, toValue)) {
-        xs.push(xOffset + tick * xPerValue);
-        labels.push(formatXLabel(tick as never));
-      }
-      return {
-        xs,
-        labels,
-        hasFirst: fromValue <= firstValue,
-        hasLast: toValue >= lastValue,
-      };
-    }
-
-    const [start, end] = getTickRange(tickXs, from, to);
-    for (let index = start; index < end; index++) {
-      xs.push(tickXs[index]!);
-      labels.push(
-        jsLabels ? jsLabels[index]! : formatXLabel(labelValues[index] as never),
-      );
-    }
-    return {
-      xs,
-      labels,
-      hasFirst: start === 0,
-      hasLast: end === tickXs.length,
-    };
+    const page = getPageTicks(drawnFrom.value, drawnTo.value, source);
+    const labels = jsLabels
+      ? jsLabels.slice(page.start, page.start + page.xs.length)
+      : page.values.map((value) => formatXLabel(value as never));
+    return { ...page, labels };
+  });
+  useReportVisibleTicks({
+    drawn,
+    chartBounds,
+    scrollXDerived,
+    isScrolling,
+    labelXCenter,
+    onVisibleTicksChange,
   });
   const picture = useDerivedValue(() => {
     const { xs, labels, hasFirst, hasLast } = drawn.value;
@@ -253,9 +235,9 @@ export const MemoizedXAxis = <
         if (lineWidth > 0) {
           canvas.drawLine(x, lineTop, x, lineBottom, linePaint);
         }
-        if (!font) continue;
+        const label = labels[index];
+        if (!font || label === undefined) continue;
 
-        const label = labels[index]!;
         const top = typeof label === "string" ? label : label.top;
         const bottom = typeof label === "string" ? null : label.bottom;
         const topWidth = getTextWidth(font, top);
@@ -327,17 +309,16 @@ function getTextWidth(font: SkFont, text: string) {
 function useReportVisibleTicks<
   RawData extends Record<string, unknown>,
   XK extends keyof InputFields<RawData>,
+  Page extends { xs: number[]; values: unknown[] },
 >({
-  tickXs,
-  labelValues,
+  drawn,
   chartBounds,
   scrollXDerived,
   isScrolling,
   labelXCenter,
   onVisibleTicksChange,
 }: {
-  tickXs: Float64Array;
-  labelValues: ArrayLike<unknown>;
+  drawn: DerivedValue<Page>;
   chartBounds: ChartBounds;
   scrollXDerived: SharedValue<number>;
   isScrolling: SharedValue<boolean>;
@@ -348,23 +329,21 @@ function useReportVisibleTicks<
     () =>
       onVisibleTicksChange &&
       debounce(
-        (start: number, end: number) =>
-          onVisibleTicksChange(
-            Array.prototype.slice.call(labelValues, start, end) as Array<
-              ValueOf<RawData[XK]>
-            >,
-          ),
+        (visible: unknown[]) =>
+          onVisibleTicksChange(visible as Array<ValueOf<RawData[XK]>>),
         50,
       ),
-    [onVisibleTicksChange, labelValues],
+    [onVisibleTicksChange],
   );
 
   useAnimatedReaction(
     () => {
       if (!report) return null;
+      const { xs, values } = drawn.value;
       const detectionOffset = labelXCenter ? 30 : 0;
-      return getTickRange(
-        tickXs,
+      return getTicksIn(
+        xs,
+        values,
         chartBounds.left - detectionOffset - scrollXDerived.value,
         chartBounds.right - detectionOffset - scrollXDerived.value,
       );
@@ -375,13 +354,14 @@ function useReportVisibleTicks<
         current &&
         isScrolling.value &&
         (previous === null ||
+          current.length !== previous.length ||
           current[0] !== previous[0] ||
-          current[1] !== previous[1])
+          current[current.length - 1] !== previous[previous.length - 1])
       ) {
-        runOnJS(report)(current[0], current[1]);
+        runOnJS(report)(current);
       }
     },
-    [report, tickXs, chartBounds, labelXCenter, scrollXDerived, isScrolling],
+    [report, drawn, chartBounds, labelXCenter, scrollXDerived, isScrolling],
   );
 }
 
@@ -395,7 +375,11 @@ export const XAxisDefaults = {
   axisSide: "bottom",
   yAxisSide: "left",
   labelPosition: "outset",
-  formatXLabel: (label: ValueOf<InputDatum>) => String(label),
+  // A worklet: a scroll axis with `getXTicks` labels its ticks on the UI thread.
+  formatXLabel: (label: ValueOf<InputDatum>) => {
+    "worklet";
+    return String(label);
+  },
   labelColor: "#000000",
   labelRotate: 0,
 } satisfies XAxisPropsWithDefaults<never, never>;

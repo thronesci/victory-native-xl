@@ -1,3 +1,5 @@
+import type { GetXTicks } from "../types";
+
 export const DEFAULT_TICK_COUNT = 5;
 
 function coerceNumArray<T>(collection: Array<T>) {
@@ -28,6 +30,21 @@ export const downsampleTicks = (tickValues: number[], tickCount: number) => {
   return tickValues.filter((_, i) => i % k === 0);
 };
 
+/**
+ * A scroll axis's fixed ticks, ascending, as its binary search needs: `tickValues` may come in any order. Without them,
+ * the scale's own ticks.
+ */
+export const getFixedTicks = (
+  tickValues: number[] | undefined,
+  tickCount: number,
+  scaleTicks: (count: number) => number[],
+) =>
+  [
+    ...(tickValues
+      ? downsampleTicks(tickValues, tickCount)
+      : scaleTicks(tickCount)),
+  ].sort((a, b) => a - b);
+
 // Each worklet captures the ones it calls when it is defined, so they come first.
 /** How many of the ascending `tickXs` are below `x`, or at or below it with `orEqual`. */
 const countBelow = (tickXs: ArrayLike<number>, x: number, orEqual: boolean) => {
@@ -54,6 +71,69 @@ export const getTickRange = (
 ): [number, number] => {
   "worklet";
   return [countBelow(tickXs, from, false), countBelow(tickXs, to, true)];
+};
+
+/** Where a scroll axis's ticks come from: `getXTicks`, on a linear scale, or fixed ticks at ascending `tickXs`. */
+export type PageTickSource<T> =
+  | {
+      getXTicks: GetXTicks;
+      /** A value's x in the content is xOffset + value * xPerValue. */
+      xOffset: number;
+      xPerValue: number;
+      /** The data's ends. */
+      firstValue: number;
+      lastValue: number;
+    }
+  | { tickXs: ArrayLike<number>; values: ArrayLike<T> };
+
+/**
+ * The ticks a scroll axis draws at [from, to] in its content's x: their x, their values for labels and reports, the
+ * first one's index among fixed ticks, and whether the axis's first and last ticks are among them.
+ */
+export const getPageTicks = <T>(
+  from: number,
+  to: number,
+  source: PageTickSource<T>,
+): {
+  xs: number[];
+  values: (T | number)[];
+  start: number;
+  hasFirst: boolean;
+  hasLast: boolean;
+} => {
+  "worklet";
+  if ("getXTicks" in source) {
+    const fromValue = (from - source.xOffset) / source.xPerValue;
+    const toValue = (to - source.xOffset) / source.xPerValue;
+    const values = source.getXTicks(fromValue, toValue);
+    return {
+      xs: values.map((value) => source.xOffset + value * source.xPerValue),
+      values,
+      start: 0,
+      hasFirst: fromValue <= source.firstValue,
+      hasLast: toValue >= source.lastValue,
+    };
+  }
+  const [start, end] = getTickRange(source.tickXs, from, to);
+  return {
+    xs: Array.prototype.slice.call(source.tickXs, start, end),
+    values: Array.prototype.slice.call(source.values, start, end),
+    start,
+    hasFirst: start === 0,
+    hasLast: end === source.tickXs.length,
+  };
+};
+
+/** The values of a page's ticks at [from, to] in the content's x. */
+export const getTicksIn = <T>(
+  xs: ArrayLike<number>,
+  values: T[],
+  from: number,
+  to: number,
+): T[] => {
+  "worklet";
+  const [start, end] = getTickRange(xs, from, to);
+  return values.slice(start, end);
 };
 
 /**
