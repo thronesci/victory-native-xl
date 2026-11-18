@@ -18,11 +18,12 @@ import {
 import {
   DEFAULT_TICK_COUNT,
   downsampleTicks,
-  getDrawnTickRange,
+  getDrawnRange,
   getTickRange,
 } from "../../utils/tickHelpers";
 import type {
   ChartBounds,
+  GetXTicks,
   InputDatum,
   InputFields,
   ValueOf,
@@ -74,12 +75,14 @@ export const MemoizedXAxis = <
   labelXCenter = false,
   scrollXDerived,
   isScrolling,
+  getXTicks,
 }: XAxisProps<RawData, XK> & {
   scrollX: SharedValue<number>;
   ignoreClip: boolean;
   onVisibleTicksChange?: (visibleTickData: Array<ValueOf<RawData[XK]>>) => void;
   scrollXDerived: SharedValue<number>;
   isScrolling: SharedValue<boolean>;
+  getXTicks?: GetXTicks;
 }) => {
   const transformX = useDerivedValue(() => {
     "worklet";
@@ -93,15 +96,17 @@ export const MemoizedXAxis = <
   const [y1 = 0, y2 = 0] = yScale.domain();
   const fontSize = font?.getSize() ?? 0;
 
-  // Use tickValues if provided, otherwise generate ticks
+  // Use tickValues if provided, otherwise generate ticks. With `getXTicks` the axis asks for them as it scrolls instead.
   const xTicksNormalized = useMemo(
     () =>
-      tickValues
-        ? downsampleTicks(tickValues, tickCount)
-        : enableRescaling
-          ? xScale.ticks(tickCount)
-          : xScaleProp.ticks(tickCount),
-    [tickValues, tickCount, enableRescaling, xScale, xScaleProp],
+      getXTicks
+        ? []
+        : tickValues
+          ? downsampleTicks(tickValues, tickCount)
+          : enableRescaling
+            ? xScale.ticks(tickCount)
+            : xScaleProp.ticks(tickCount),
+    [getXTicks, tickValues, tickCount, enableRescaling, xScale, xScaleProp],
   );
   // Each tick's x in the scrolling content, which `transformX` moves. Ticks are ascending, so these are too. Typed
   // arrays reach the UI thread in one copy; worklets copy a plain array's numbers one by one, which for thousands of
@@ -175,24 +180,66 @@ export const MemoizedXAxis = <
   // Below the second label line, for the picture's bounds.
   const axisBottom = labelY + SECOND_LINE_OFFSET + fontSize;
 
-  // Drawn on the UI thread from the scroll, so a fling never outruns the axis however busy JS is, and only near the
-  // plot, so the cost doesn't grow with the axis. Each frame finds the drawn ticks by binary search; the picture is
-  // recorded again only when a tick enters or leaves them.
-  const drawnStart = useDerivedValue(
-    () => getDrawnTickRange(tickXs, scrollXDerived.value, chartBounds)[0],
+  // The scale is linear: a value's x in the content is xOffset + value * xPerValue.
+  const [domainStart = 0, domainEnd = 1] = xScale.domain();
+  const [rangeStart = 0, rangeEnd = 1] = xScale.range();
+  const xPerValue = (rangeEnd - rangeStart) / (domainEnd - domainStart);
+  const xOffset = rangeStart - domainStart * xPerValue;
+  // The data's ends, where the first and last labels sit.
+  const firstValue = Number(ix[0]);
+  const lastValue = Number(ix[ix.length - 1]);
+
+  // Drawn on the UI thread from the scroll, so a fling never outruns the axis however busy JS is, and only around the
+  // plot (`getDrawnRange`), so the cost doesn't grow with the axis. `drawnFrom` is a number, which notifies only when
+  // it changes, so the ticks are found and the picture recorded again only when the scroll crosses into another page.
+  const drawnFrom = useDerivedValue(
+    () => getDrawnRange(scrollXDerived.value, chartBounds)[0],
   );
-  const drawnEnd = useDerivedValue(
-    () => getDrawnTickRange(tickXs, scrollXDerived.value, chartBounds)[1],
+  const drawnTo = useDerivedValue(
+    () => getDrawnRange(scrollXDerived.value, chartBounds)[1],
   );
+  const drawn = useDerivedValue(() => {
+    const from = drawnFrom.value;
+    const to = drawnTo.value;
+    const xs: number[] = [];
+    const labels: (string | { top: string; bottom: string })[] = [];
+    if (getXTicks) {
+      const fromValue = (from - xOffset) / xPerValue;
+      const toValue = (to - xOffset) / xPerValue;
+      for (const tick of getXTicks(fromValue, toValue)) {
+        xs.push(xOffset + tick * xPerValue);
+        labels.push(formatXLabel(tick as never));
+      }
+      return {
+        xs,
+        labels,
+        hasFirst: fromValue <= firstValue,
+        hasLast: toValue >= lastValue,
+      };
+    }
+
+    const [start, end] = getTickRange(tickXs, from, to);
+    for (let index = start; index < end; index++) {
+      xs.push(tickXs[index]!);
+      labels.push(
+        jsLabels ? jsLabels[index]! : formatXLabel(labelValues[index] as never),
+      );
+    }
+    return {
+      xs,
+      labels,
+      hasFirst: start === 0,
+      hasLast: end === tickXs.length,
+    };
+  });
   const picture = useDerivedValue(() => {
-    const start = drawnStart.value;
-    const end = drawnEnd.value;
-    if (start >= end) return createPicture(() => {});
+    const { xs, labels, hasFirst, hasLast } = drawn.value;
+    if (xs.length === 0) return createPicture(() => {});
 
     // Room for the labels either side of the outer ticks.
     const labelRoom = chartBounds.right - chartBounds.left;
-    const pictureLeft = tickXs[start]! - labelRoom;
-    const pictureRight = tickXs[end - 1]! + labelRoom;
+    const pictureLeft = xs[0]! - labelRoom;
+    const pictureRight = xs[xs.length - 1]! + labelRoom;
     // Without bounds a picture covers only positive x, and older ticks sit far left of 0 in the content.
     const bounds = Skia.XYWHRect(
       pictureLeft,
@@ -201,16 +248,14 @@ export const MemoizedXAxis = <
       axisBottom,
     );
     return createPicture((canvas) => {
-      for (let index = start; index < end; index++) {
-        const x = tickXs[index]!;
+      for (let index = 0; index < xs.length; index++) {
+        const x = xs[index]!;
         if (lineWidth > 0) {
           canvas.drawLine(x, lineTop, x, lineBottom, linePaint);
         }
         if (!font) continue;
 
-        const label = jsLabels
-          ? jsLabels[index]!
-          : formatXLabel(labelValues[index] as never);
+        const label = labels[index]!;
         const top = typeof label === "string" ? label : label.top;
         const bottom = typeof label === "string" ? null : label.bottom;
         const topWidth = getTextWidth(font, top);
@@ -220,8 +265,8 @@ export const MemoizedXAxis = <
           bottom && secondaryXFont ? getTextWidth(secondaryXFont, bottom) : 0;
         let centerX = x;
         if (labelXCenter) {
-          const next = tickXs[index + 1];
-          const previous = tickXs[index - 1];
+          const next = xs[index + 1];
+          const previous = xs[index - 1];
           centerX =
             next !== undefined
               ? (x + next) / 2
@@ -230,7 +275,12 @@ export const MemoizedXAxis = <
                 : x;
         }
         // Nudge the first and last labels inward from the content's ends.
-        const nudge = index === 0 ? 10 : index === tickXs.length - 1 ? -4 : 0;
+        const nudge =
+          hasFirst && index === 0
+            ? 10
+            : hasLast && index === xs.length - 1
+              ? -4
+              : 0;
         canvas.drawText(
           top,
           centerX - topWidth / 2 + nudge,

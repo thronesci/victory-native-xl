@@ -57,29 +57,25 @@ export const getTickRange = (
 };
 
 /**
- * The ticks a scrolling x axis draws at `scrollX`, as [start, end) indices into the ascending content positions
- * `tickXs`: those within half the plot's width of it, so a label centered on a tick just outside still shows. Found by
- * binary search, so the cost stays the same however many ticks the axis has.
+ * The stretch of a scrolling x axis to draw at `scrollX`, in the content's x: three plot widths around the page the
+ * plot's left edge is in, so the plot and half its width either side stay inside it until the scroll crosses into the
+ * next page. A label centered on a tick just outside the plot still shows, and the axis redraws once a screen.
  */
-export const getDrawnTickRange = (
-  tickXs: ArrayLike<number>,
+export const getDrawnRange = (
   scrollX: number,
   { left, right }: { left: number; right: number },
 ): [number, number] => {
   "worklet";
-  const buffer = (right - left) / 2;
-  return getTickRange(
-    tickXs,
-    left - buffer - scrollX,
-    right + buffer - scrollX,
-  );
+  const width = right - left;
+  const page = Math.floor((left - scrollX) / width);
+  return [(page - 0.5) * width, (page + 2.5) * width];
 };
 
 export const getDomainFromTicks = (
   tickValues: number[] | undefined,
 ): [number, number] | undefined => {
   // Check if undefined OR if its not an array of numbers
-  if (!tickValues) return;
+  if (!tickValues?.length) return;
 
   let numTicksArr;
   if (containsNonNumbers(tickValues)) {
