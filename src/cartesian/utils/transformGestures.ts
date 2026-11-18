@@ -365,6 +365,10 @@ const withDecelerationTo = ({
         animation.reported = reported;
         animation.lastX = animation.fromX;
         animation.lastTime = now;
+        // A drag released past a limit returns into the limits along the curve; only a scroll that's been inside them
+        // is kept there.
+        animation.hasBeenInside =
+          Math.abs(scrollWithin(from) - from) <= REACH_TOLERANCE;
         animation.current = from;
       },
       onFrame: (animation: AnimationObject<number>, now: number) => {
@@ -383,15 +387,20 @@ const withDecelerationTo = ({
           ? pickRestX(scrollWithin(toScroll))
           : Number.NaN;
         const repickedScroll = geometry.scrollAt(repickedX);
-        // Where the last frame drew it, in the current geometry, inside a limit that's overtaken it.
-        const lastScroll = scrollWithin(geometry.scrollAt(animation.lastX));
-        if (
-          Number.isFinite(lastScroll) &&
+        // Where the last frame drew it, in the current geometry, and inside a limit that's overtaken it.
+        const drawnScroll = geometry.scrollAt(animation.lastX);
+        const lastScroll = scrollWithin(drawnScroll);
+        // A refresh that trims the bars on screen while keeping the target leaves the last frame past a limit.
+        const isDrawnPastLimit =
+          animation.hasBeenInside &&
+          Math.abs(lastScroll - drawnScroll) > REACH_TOLERANCE;
+        const isRepicked =
           Number.isFinite(repickedScroll) &&
-          Math.abs(repickedScroll - toScroll) > REACH_TOLERANCE
-        ) {
-          // The new curve starts where and when the last frame drew it, at the speed it had then (px/ms), and this frame
-          // advances along it, so a target that moves on every frame doesn't hold the scroll still.
+          Math.abs(repickedScroll - toScroll) > REACH_TOLERANCE;
+        if (Number.isFinite(lastScroll) && (isRepicked || isDrawnPastLimit)) {
+          // The new curve starts where and when the last frame drew it, inside the limits, at the speed it had then
+          // (px/ms), and this frame advances along it, so a target that moves on every frame doesn't hold the scroll
+          // still.
           const { durationMs, timeConstants, settled } = animation;
           const lastProgress =
             durationMs > 0
@@ -407,11 +416,15 @@ const withDecelerationTo = ({
                   Math.exp(-timeConstants * lastProgress)) /
                 (settled * durationMs)
               : 0;
-          aim(animation, lastScroll, repickedX, speed, animation.lastTime);
-          reportTarget(animation);
-        } else {
-          reportTarget(animation);
+          aim(
+            animation,
+            lastScroll,
+            isRepicked ? repickedX : animation.toX,
+            speed,
+            animation.lastTime,
+          );
         }
+        reportTarget(animation);
 
         const { durationMs, timeConstants, settled, fromX } = animation;
         const progress =
@@ -434,6 +447,9 @@ const withDecelerationTo = ({
         if (Number.isFinite(scroll)) {
           animation.current = scroll;
           animation.lastX = x;
+          if (Math.abs(scrollWithin(scroll) - scroll) <= REACH_TOLERANCE) {
+            animation.hasBeenInside = true;
+          }
         }
         return progress === 1;
       },

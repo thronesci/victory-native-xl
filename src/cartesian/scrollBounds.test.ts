@@ -586,6 +586,59 @@ describe("scrollTransformGesture", () => {
       }
     });
 
+    it.each([
+      // The bar it picked, x = 480, lands at offset 80; the ones on screen go.
+      {
+        velocityX: 2000,
+        bounds: [-80, 600],
+        shift: 400,
+        trimmed: [-80, 200],
+        rests: 80,
+      },
+      // Mirrored: x = -480 lands at offset -80.
+      {
+        velocityX: -2000,
+        bounds: [-600, 80],
+        shift: -400,
+        trimmed: [-200, 80],
+        rests: -80,
+      },
+    ] as const)(
+      "restarts inside the limits, keeping its bar, when a data refresh trims the bars it's drawing ($velocityX px/s)",
+      ({ velocityX, bounds, shift, trimmed, rests }) => {
+        const geometry = { shift: 0 };
+        const scrolls: number[] = [];
+        const limits: [number, number][] = [];
+        const { scrollBounds, decay } = fling([bounds[0], bounds[1]], {
+          velocityX,
+          geometry,
+          snapScrollEnd: snapToBars,
+        });
+
+        const { restingScroll } = runToRest(
+          decay,
+          0,
+          (now) => {
+            if (now === 32) {
+              geometry.shift = shift;
+              scrollBounds.value = [trimmed[0], trimmed[1]];
+            }
+          },
+          (scroll) => {
+            scrolls.push(scroll);
+            limits.push(scrollBounds.value);
+          },
+        );
+
+        expect(restingScroll).toBe(rests);
+        for (const [index, scroll] of scrolls.entries()) {
+          const [min, max] = limits[index] ?? [Number.NaN, Number.NaN];
+          expect(scroll).toBeGreaterThanOrEqual(min);
+          expect(scroll).toBeLessThanOrEqual(max);
+        }
+      },
+    );
+
     it("drops the momentum and reports nothing at release when the system cancels the pan", () => {
       const onScrollEndTarget = vi.fn();
       const { release } = scrollChart([-80, 600], {
