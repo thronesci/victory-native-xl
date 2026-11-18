@@ -172,13 +172,13 @@ describe("scrollTransformGesture", () => {
         snapScroll,
       });
 
-      // Momentum alone would stop at about 150 px.
-      expect(decay.toValue).toBe(160);
+      // Momentum alone would stop at about 75 px.
+      expect(decay.toValue).toBe(80);
       expect(decay.config?.easing?.(0)).toBe(0);
       expect(decay.config?.easing?.(1)).toBeCloseTo(1);
       expect(decay.config?.duration).toBeGreaterThan(0);
-      settle(decay, 160);
-      expect(onScrollEnd).toHaveBeenCalledWith(160);
+      settle(decay, 80);
+      expect(onScrollEnd).toHaveBeenCalledWith(80);
     });
 
     it("decelerates with Reduce Motion on, rather than jumping to where it rests", () => {
@@ -186,6 +186,12 @@ describe("scrollTransformGesture", () => {
       const { decay } = fling([-80, 600], { velocityX: 300, snapScroll });
 
       expect(decay.config?.reduceMotion).toBe("never");
+    });
+
+    it("brings a fast fling to rest within a second and a half", () => {
+      const { decay } = fling([-2000, 2000], { velocityX: 2000, snapScroll });
+
+      expect(decay.config?.duration).toBeLessThan(1500);
     });
 
     it("keeps the snapped rest inside the bounds", () => {
