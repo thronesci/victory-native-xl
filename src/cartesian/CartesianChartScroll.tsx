@@ -54,8 +54,10 @@ import {
   type PanTransformGestureConfig,
   pinchTransformGesture,
   type PinchTransformGestureConfig,
+  getPlotXEdges,
   getScrollSnapshot,
-  type ScrollGeometry,
+  type ScrollSnapshot,
+  scrollGeometryFrom,
   scrollTransformGesture,
 } from "./utils/transformGestures";
 import {
@@ -266,9 +268,10 @@ function CartesianChartContent<
     const primaryYAxis = yAxes[0];
     const primaryYScale = primaryYAxis.yScale;
     const chartBounds = {
-      left: xScale(viewport?.x?.[0] ?? xScale.domain().at(0) ?? 0) || xScale(0),
-      right:
-        xScale(viewport?.x?.[1] ?? xScale.domain().at(-1) ?? 0) || xScale(0),
+      ...getPlotXEdges(xScale, viewport?.x, [
+        xScale.domain().at(0) ?? 0,
+        xScale.domain().at(-1) ?? 0,
+      ]),
       top: primaryYScale(
         viewport?.y?.[1] ?? (primaryYScale.domain().at(0) || 0),
       ),
@@ -505,7 +508,7 @@ function CartesianChartContent<
 
   // The plot's scale and scroll limits for worklets that outlast a render, such as a settling fling or its report,
   // published as one snapshot in one write (`getScrollSnapshot`).
-  const scrollSnapshot = useSharedValue<ReturnType<typeof getScrollSnapshot>>({
+  const scrollSnapshot = useSharedValue<ScrollSnapshot>({
     domainStart: 0,
     rangeStart: 0,
     pixelsPerX: Number.NaN,
@@ -537,41 +540,14 @@ function CartesianChartContent<
     maxScrollOffset,
     data.length,
   ]);
-  const scrollGeometry = React.useMemo<ScrollGeometry>(() => {
-    const xAt = (pixel: number, scroll: number) => {
-      "worklet";
-      const g = scrollSnapshot.value;
-      return (
-        g.domainStart +
-        (pixel - scroll - g.drawnShift - g.rangeStart) / g.pixelsPerX
-      );
-    };
-    return {
-      limits: () => {
+  const scrollGeometry = React.useMemo(
+    () =>
+      scrollGeometryFrom(() => {
         "worklet";
-        return scrollSnapshot.value.limits;
-      },
-      rightEdgeXAt: (scroll) => {
-        "worklet";
-        return xAt(scrollSnapshot.value.plotRight, scroll);
-      },
-      scrollAt: (rightEdgeX) => {
-        "worklet";
-        const g = scrollSnapshot.value;
-        return (
-          g.plotRight -
-          g.drawnShift -
-          g.rangeStart -
-          (rightEdgeX - g.domainStart) * g.pixelsPerX
-        );
-      },
-      visibleXDomainAt: (scroll) => {
-        "worklet";
-        const g = scrollSnapshot.value;
-        return [xAt(g.plotLeft, scroll), xAt(g.plotRight, scroll)];
-      },
-    };
-  }, [scrollSnapshot]);
+        return scrollSnapshot.value;
+      }),
+    [scrollSnapshot],
+  );
 
   // Memoize the composed gesture
   const composedGesture = React.useMemo(() => {

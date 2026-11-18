@@ -1,5 +1,5 @@
 import { useRef, useEffect, useImperativeHandle } from "react";
-import { useSharedValue, type SharedValue } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 import {
   getContractedScroll,
   getScrollBounds,
@@ -46,11 +46,10 @@ export function useCartesianScrollHandler({
 
   // Bounds that contract past a resting scroll (shorter data, a smaller `maxScrollOffset`) move it to their new edge,
   // or the plot could go blank. A user scroll in progress returns into them as it settles.
+  // The scroll gesture reads the bounds published with the scale (`getScrollSnapshot`), not these.
   const [minScroll, maxScroll] = getScrollBounds(dimensions, maxScrollOffset);
-  const scrollBounds = useSharedValue<[number, number]>([minScroll, maxScroll]);
   const measuredBoundsRef = useRef<[number, number] | null>(null);
   useEffect(() => {
-    scrollBounds.value = [minScroll, maxScroll];
     if (!isMeasured) return;
     const prevBounds = measuredBoundsRef.current;
     measuredBoundsRef.current = [minScroll, maxScroll];
@@ -60,7 +59,7 @@ export function useCartesianScrollHandler({
       maxScroll,
     ]);
     if (contractedScroll !== undefined) jumpTo(contractedScroll);
-  }, [minScroll, maxScroll, isMeasured, scrollBounds, scrollX, isScrolling]);
+  }, [minScroll, maxScroll, isMeasured, scrollX, isScrolling]);
 
   // Allows us to control the scroll from the parent component
   useImperativeHandle(
@@ -95,6 +94,4 @@ export function useCartesianScrollHandler({
     }),
     [xScale, dimensions, scrollX, prevTranslateX, isScrolling, maxScrollOffset],
   );
-
-  return scrollBounds;
 }

@@ -3,10 +3,13 @@ import type { SharedValue } from "react-native-reanimated";
 import {
   getContractedScroll,
   getScrollBounds,
+  getPlotXEdges,
   getScrollSnapshot,
   type ScrollGeometry,
+  scrollGeometryFrom,
   scrollTransformGesture,
 } from "./utils/transformGestures";
+import { transformInputData } from "./utils/transformInputData";
 
 type Animation = {
   config?: { clamp?: [number, number] };
@@ -550,6 +553,39 @@ describe("scrollTransformGesture", () => {
       expect(onScrollEnd.mock.calls).toEqual([[[180, 480]]]);
     });
 
+    it("keeps moving inside the limits when its resting bar changes on every frame", () => {
+      const scrolls: number[] = [];
+      const limits: number[] = [];
+      const { scrollBounds, decay } = fling([-80, 2000], {
+        velocityX: 4000,
+        // Rests on 1 px bars inside the limits.
+        snapScrollEnd: (rightEdgeX, [first, last]) =>
+          Math.min(Math.max(Math.round(rightEdgeX), first), last),
+      });
+
+      // A rolling window: each of 20 frames moves the oldest reachable bar, and with it where the fling rests.
+      runToRest(
+        decay,
+        0,
+        (now) => {
+          if (now >= 16 && now <= 320)
+            scrollBounds.value = [-80, 400 - now / 16];
+        },
+        (scroll) => {
+          scrolls.push(scroll);
+          limits.push(scrollBounds.value[1]);
+        },
+      );
+
+      for (const [index, scroll] of scrolls.entries()) {
+        expect(scroll).toBeLessThanOrEqual(limits[index] ?? scroll);
+        const previous = scrolls[index - 1];
+        if (previous !== undefined && previous < (limits[index] ?? 0) - 1) {
+          expect(scroll).toBeGreaterThan(previous);
+        }
+      }
+    });
+
     it("drops the momentum and reports nothing at release when the system cancels the pan", () => {
       const onScrollEndTarget = vi.fn();
       const { release } = scrollChart([-80, 600], {
@@ -667,5 +703,81 @@ describe("scrollTransformGesture", () => {
       expect(runToRest(deceleration, 0).restingScroll).toBe(80);
       expect(onScrollEndTarget.mock.calls).toEqual([[[-220, 80]]]);
     });
+  });
+});
+
+describe("a scroll chart's reported ranges", () => {
+  it("match the canvas edges, inverted through the chart's scale, when the first timestamp sits on pixel 0", () => {
+    // A 300 px canvas with no padding, showing 30 seconds of two timestamped samples.
+    const data = [
+      { t: 1_700_000_000, y: 1 },
+      { t: 1_700_000_100, y: 2 },
+    ];
+    const viewportX: [number, number] = [1_700_000_000, 1_700_000_030];
+    const { xScale, ox } = transformInputData({
+      data,
+      xKey: "t",
+      yKeys: ["y"],
+      outputWindow: { xMin: 0, xMax: 300, yMin: 0, yMax: 300 },
+      domainPadding: 0,
+      viewport: { x: viewportX },
+      xAxis: {
+        lineColor: "#000",
+        lineWidth: 0,
+        tickCount: 0,
+        labelOffset: 0,
+        axisSide: "bottom",
+        yAxisSide: "left",
+        labelPosition: "outset",
+        formatXLabel: String,
+        labelColor: "#000",
+      },
+      yAxes: [
+        {
+          lineColor: "#000",
+          lineWidth: 0,
+          tickCount: 0,
+          labelOffset: 0,
+          axisSide: "left",
+          labelPosition: "outset",
+          formatYLabel: String,
+          labelColor: "#000",
+          yKeys: ["y"],
+          domain: null,
+        },
+      ],
+    });
+    const { left, right } = getPlotXEdges(xScale, viewportX);
+    const [rangeStart = 0, rangeEnd = 0] = xScale.range();
+    const dimensions = {
+      width: rangeEnd - rangeStart,
+      totalContentWidth: Math.max(...ox) - Math.min(...ox),
+    };
+    const [domainStart = 0, domainEnd = 0] = xScale.domain();
+    const snapshot = getScrollSnapshot({
+      xDomain: [domainStart, domainEnd],
+      xRange: [rangeStart, rangeEnd],
+      plotLeft: left,
+      plotRight: right,
+      canvasWidth: 300,
+      dimensions,
+      maxScrollOffset: 0,
+      hasSamples: true,
+    });
+    const geometry = scrollGeometryFrom(() => snapshot);
+    // A point at x is drawn at `xScale(x)` plus this translation (`scrollXDerived`).
+    const translationAt = (scroll: number) =>
+      scroll - dimensions.totalContentWidth + 300;
+    const canvasEdgesAt = (scroll: number) => [
+      xScale.invert(0 - translationAt(scroll)),
+      xScale.invert(300 - translationAt(scroll)),
+    ];
+
+    for (const scroll of [0, 250, 750]) {
+      const [visibleLeft, visibleRight] = geometry.visibleXDomainAt(scroll);
+      const [canvasLeft, canvasRight] = canvasEdgesAt(scroll);
+      expect(visibleLeft).toBeCloseTo(canvasLeft ?? Number.NaN, 3);
+      expect(visibleRight).toBeCloseTo(canvasRight ?? Number.NaN, 3);
+    }
   });
 });

@@ -182,6 +182,69 @@ export const getScrollSnapshot = ({
   };
 };
 
+export type ScrollSnapshot = ReturnType<typeof getScrollSnapshot>;
+
+/**
+ * The scroll geometry of the snapshot `getSnapshot` returns on each call, a worklet such as one reading a shared value,
+ * so a fling that outlasts a render follows the chart's latest snapshot.
+ */
+export const scrollGeometryFrom = (
+  getSnapshot: () => ScrollSnapshot,
+): ScrollGeometry => {
+  const xAt = (pixel: number, scroll: number) => {
+    "worklet";
+    const g = getSnapshot();
+    return (
+      g.domainStart +
+      (pixel - scroll - g.drawnShift - g.rangeStart) / g.pixelsPerX
+    );
+  };
+  return {
+    limits: () => {
+      "worklet";
+      return getSnapshot().limits;
+    },
+    rightEdgeXAt: (scroll) => {
+      "worklet";
+      return xAt(getSnapshot().plotRight, scroll);
+    },
+    scrollAt: (rightEdgeX) => {
+      "worklet";
+      const g = getSnapshot();
+      return (
+        g.plotRight -
+        g.drawnShift -
+        g.rangeStart -
+        (rightEdgeX - g.domainStart) * g.pixelsPerX
+      );
+    },
+    visibleXDomainAt: (scroll) => {
+      "worklet";
+      const g = getSnapshot();
+      return [xAt(g.plotLeft, scroll), xAt(g.plotRight, scroll)];
+    },
+  };
+};
+
+/**
+ * The plot's left and right pixels: the viewport's x values, or the domain's ends. Any finite pixel stands, 0 included,
+ * where the first timestamp of an unpadded chart sits; only one the scale can't place falls back to `xScale(0)`.
+ */
+export const getPlotXEdges = (
+  xScale: (x: number) => number,
+  viewportX: [number, number] | undefined,
+  [domainStart, domainEnd]: number[] = [],
+) => {
+  const pixelAt = (x: number) => {
+    const pixel = xScale(x);
+    return Number.isFinite(pixel) ? pixel : xScale(0);
+  };
+  return {
+    left: pixelAt(viewportX?.[0] ?? domainStart ?? 0),
+    right: pixelAt(viewportX?.[1] ?? domainEnd ?? 0),
+  };
+};
+
 const isFiniteDomain = (domain: [number, number]) => {
   "worklet";
   return Number.isFinite(domain[0]) && Number.isFinite(domain[1]);
@@ -301,17 +364,16 @@ const withDecelerationTo = ({
         aim(animation, from, toX, velocity / 1000, now);
         animation.reported = reported;
         animation.lastX = animation.fromX;
+        animation.lastTime = now;
         animation.current = from;
       },
       onFrame: (animation: AnimationObject<number>, now: number) => {
         // Started from a gesture callback, it takes the clock's time, and its first frame can pass an earlier vsync
         // time. Start from that frame, as `withTiming` does, or the first frame steps back.
-        if (now < animation.startTime) animation.startTime = now;
-        const { durationMs, timeConstants, settled, fromX } = animation;
-        const progress =
-          durationMs > 0
-            ? Math.min(1, (now - animation.startTime) / durationMs)
-            : 1;
+        if (now < animation.startTime) {
+          animation.startTime = now;
+          animation.lastTime = now;
+        }
 
         const toScroll = geometry.scrollAt(animation.toX);
         // Converting an x value at a limit back to offsets can land a rounding error past it, which isn't a contraction.
@@ -328,22 +390,34 @@ const withDecelerationTo = ({
           Number.isFinite(repickedScroll) &&
           Math.abs(repickedScroll - toScroll) > REACH_TOLERANCE
         ) {
-          // The speed it's moving at now, in px/ms.
+          // The new curve starts where and when the last frame drew it, at the speed it had then (px/ms), and this frame
+          // advances along it, so a target that moves on every frame doesn't hold the scroll still.
+          const { durationMs, timeConstants, settled } = animation;
+          const lastProgress =
+            durationMs > 0
+              ? Math.min(
+                  1,
+                  (animation.lastTime - animation.startTime) / durationMs,
+                )
+              : 1;
           const speed =
-            progress < 1
+            lastProgress < 1
               ? (animation.distance *
                   timeConstants *
-                  Math.exp(-timeConstants * progress)) /
+                  Math.exp(-timeConstants * lastProgress)) /
                 (settled * durationMs)
               : 0;
-          aim(animation, lastScroll, repickedX, speed, now);
+          aim(animation, lastScroll, repickedX, speed, animation.lastTime);
           reportTarget(animation);
-          animation.lastX = animation.fromX;
-          animation.current = lastScroll;
-          return false;
+        } else {
+          reportTarget(animation);
         }
 
-        reportTarget(animation);
+        const { durationMs, timeConstants, settled, fromX } = animation;
+        const progress =
+          durationMs > 0
+            ? Math.min(1, (now - animation.startTime) / durationMs)
+            : 1;
         const x =
           progress === 1
             ? animation.toX
@@ -352,7 +426,10 @@ const withDecelerationTo = ({
                 (1 - Math.exp(-timeConstants * progress))) /
                 settled;
         const scroll =
-          progress === 1 ? scrollWithin(toScroll) : geometry.scrollAt(x);
+          progress === 1
+            ? scrollWithin(geometry.scrollAt(animation.toX))
+            : geometry.scrollAt(x);
+        animation.lastTime = now;
         // A remeasure that loses the chart's x values holds the last frame.
         if (Number.isFinite(scroll)) {
           animation.current = scroll;
