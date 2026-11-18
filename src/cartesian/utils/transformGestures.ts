@@ -10,11 +10,11 @@ import {
   withDecay,
   cancelAnimation,
   type AnimationCallback,
-  ReduceMotion,
+  type AnimationObject,
+  defineAnimation,
   type SharedValue,
   runOnJS,
   withSpring,
-  withTiming,
 } from "react-native-reanimated";
 
 type Dimension = "x" | "y";
@@ -124,36 +124,90 @@ const DECELERATION_TIME_CONSTANT_MS = -1 / Math.log(0.996);
 const REST_DISTANCE = 2;
 
 /**
- * Decelerates from `from` onto `to` along an exponential curve like UIScrollView's: the one a fling of the same reach
- * follows, scaled to end exactly on `to`. As with UIKit's adjusted target content offset, a fling keeps its momentum
- * and only where it rests moves. Reduce Motion doesn't skip it, as it doesn't stop a UIScrollView decelerating: the
- * momentum is the finger's own motion, and skipping the curve would jump the content to where it rests.
+ * Where a released scroll comes to rest, worked out in the chart's x values from the plot's geometry as it is on each
+ * frame, so a scroll that settles while the chart remeasures still rests on the x value picked at release.
+ */
+export type ScrollRest = {
+  /** The x value at the plot's right edge with the chart scrolled to `scroll`. */
+  rightEdgeXAt: (scroll: number) => number;
+  /** The scroll that puts `rightEdgeX` at the plot's right edge. */
+  scrollAt: (rightEdgeX: number) => number;
+  /** The x values at the plot's left and right edges with the chart scrolled to `scroll`. */
+  visibleXDomainAt: (scroll: number) => [number, number];
+  /** Where a scroll whose right edge would stop at `rightEdgeX` rests instead (`snapScrollEnd`). */
+  snap: (rightEdgeX: number) => number;
+};
+
+/**
+ * Decelerates from `from` onto the scroll `getTo` returns on each frame, along an exponential curve like
+ * UIScrollView's, scaled to end exactly there. As with UIKit's adjusted target content offset, a fling keeps its
+ * momentum and only where it rests moves: one that rests short of where its momentum would stop starts at its release
+ * `velocity` and slows harder.
+ *
+ * It's a higher-order animation, which Reduce Motion doesn't skip, as Reduce Motion doesn't stop a UIScrollView
+ * decelerating: the momentum is the finger's own motion, and skipping the curve would jump the content to where it
+ * rests. (Reanimated's `ReduceMotion`, which would say so, only arrived in 3.5.)
  */
 const withDecelerationTo = (
   from: number,
-  to: number,
+  getTo: () => number,
+  velocity: number,
   callback: AnimationCallback,
-) => {
+): number => {
   "worklet";
-  // Time constants until the exponential would come within REST_DISTANCE; normalizing the curve rests it there exactly.
-  const timeConstants = Math.log(
-    Math.max(Math.abs(to - from), 2 * REST_DISTANCE) / REST_DISTANCE,
-  );
-  return withTiming(
-    to,
-    {
-      duration: timeConstants * DECELERATION_TIME_CONSTANT_MS,
-      reduceMotion: ReduceMotion.Never,
-      easing: (progress: number) => {
-        "worklet";
-        return (
-          (1 - Math.exp(-timeConstants * progress)) /
-          (1 - Math.exp(-timeConstants))
-        );
+  return defineAnimation<AnimationObject<number>>(from, () => {
+    "worklet";
+    const distance = getTo() - from;
+    const releaseSpeed = velocity / 1000;
+    // Time constants until the exponential would come within REST_DISTANCE; normalizing the curve rests it there exactly.
+    const timeConstants = Math.log(
+      Math.max(Math.abs(distance), 2 * REST_DISTANCE) / REST_DISTANCE,
+    );
+    // The normalized curve starts at `distance / (timeConstantMs * (1 - e^-timeConstants))`. Resting short of where
+    // momentum would stop, it takes the time constant that starts it at the release speed.
+    const timeConstantMs =
+      distance * releaseSpeed > 0
+        ? Math.min(
+            DECELERATION_TIME_CONSTANT_MS,
+            distance / (releaseSpeed * (1 - Math.exp(-timeConstants))),
+          )
+        : DECELERATION_TIME_CONSTANT_MS;
+    const durationMs = timeConstants * timeConstantMs;
+
+    return {
+      isHigherOrder: true,
+      onStart: (
+        animation: AnimationObject<number>,
+        _value: number,
+        now: number,
+      ) => {
+        animation.startTime = now;
+        animation.toValue = from + distance;
+        animation.current = from;
       },
-    },
-    callback,
-  );
+      onFrame: (animation: AnimationObject<number>, now: number) => {
+        // Started from a gesture callback, it takes the clock's time, and its first frame can pass an earlier vsync
+        // time. Start from that frame, as `withTiming` does, or the first frame steps back.
+        if (now < animation.startTime) animation.startTime = now;
+        const progress =
+          durationMs > 0
+            ? Math.min(1, (now - animation.startTime) / durationMs)
+            : 1;
+        // A remeasure moves where the picked x value is; one that loses it keeps the last place.
+        const to = getTo();
+        if (Number.isFinite(to)) animation.toValue = to;
+        const target = animation.toValue as number;
+        const travelled =
+          (1 - Math.exp(-timeConstants * progress)) /
+          (1 - Math.exp(-timeConstants));
+        animation.current =
+          progress === 1 ? target : from + (target - from) * travelled;
+        return progress === 1;
+      },
+      current: from,
+      callback,
+    } as AnimationObject<number>;
+  }) as unknown as number;
 };
 
 /**
@@ -192,7 +246,7 @@ export const scrollTransformGesture = ({
   onScroll,
   onScrollEnd,
   onScrollEndTarget,
-  snapScroll,
+  scrollRest,
   scrollBounds,
   isScrolling,
 }: {
@@ -203,13 +257,17 @@ export const scrollTransformGesture = ({
   onScroll?: (data: any) => void;
   /** Called on JS with the final `scrollX` once a user scroll's fling or spring-back comes to rest. */
   onScrollEnd?: (scrollX: number) => void;
-  /** Called on JS with the `scrollX` a released drag or fling will rest at, as it starts decelerating onto `snapScroll`'s. */
-  onScrollEndTarget?: (scrollX: number) => void;
   /**
-   * Where a released drag or fling that would stop at `scrollX` rests instead. The scroll decelerates onto it; without
-   * it, a fling decays with `withDecay` and rests anywhere.
+   * Called on JS, as a released drag or fling starts settling onto `scrollRest`'s resting place, with the x values at
+   * the plot's edges there, worked out at release. Not called for a pan the system cancels.
    */
-  snapScroll?: (scrollX: number) => number;
+  onScrollEndTarget?: (visibleXDomain: [number, number]) => void;
+  /**
+   * Where a released drag or fling rests: it decelerates, or springs back from past a limit, onto the x value
+   * `scrollRest.snap` picks. Without it, or while the chart can't place an x value, a fling decays with `withDecay` and
+   * rests anywhere.
+   */
+  scrollRest?: ScrollRest;
   /** The current `getScrollBounds`. A fling outlives the render that started it, so it reads them as it settles. */
   scrollBounds: SharedValue<[number, number]>;
   isScrolling: SharedValue<boolean>;
@@ -234,6 +292,12 @@ export const scrollTransformGesture = ({
       return;
     }
     reportScrollEnd(finished);
+  };
+  // `scroll` inside the limits as they are now.
+  const scrollWithin = (scroll: number) => {
+    "worklet";
+    const [minScroll, maxScroll] = scrollBounds.value;
+    return Math.min(Math.max(scroll, minScroll), maxScroll);
   };
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
@@ -273,40 +337,47 @@ export const scrollTransformGesture = ({
       }
     })
 
-    .onEnd((e) => {
+    .onEnd((e, success) => {
       const [minScroll, maxScroll] = scrollBounds.value;
       const currentScroll = scrollX.value;
+      const boundedScroll = scrollWithin(currentScroll);
+      const isOverscrolled = boundedScroll !== currentScroll;
+      // A pan the system cancelled carries no momentum, nor does a drag released past a limit.
+      const velocity = success && !isOverscrolled ? e.velocityX : 0;
+      // Where momentum would stop it, inside the limits before picking where it rests, so a fling past a limit rests
+      // on the last whole bar before it.
+      const stopScroll = scrollWithin(
+        boundedScroll + (velocity / 1000) * DECELERATION_TIME_CONSTANT_MS,
+      );
+      const restX = scrollRest
+        ? scrollRest.snap(scrollRest.rightEdgeXAt(stopScroll))
+        : Number.NaN;
+      const getRestingScroll = () => {
+        "worklet";
+        return scrollRest
+          ? scrollWithin(scrollRest.scrollAt(restX))
+          : Number.NaN;
+      };
+      const restingScroll = getRestingScroll();
 
-      if (currentScroll < minScroll) {
-        scrollX.value = withSpring(minScroll, springConfig, endScroll);
-      } else if (currentScroll > maxScroll) {
-        scrollX.value = withSpring(maxScroll, springConfig, endScroll);
-      } else if (snapScroll) {
-        const restingScroll = Math.min(
-          Math.max(
-            snapScroll(
-              currentScroll +
-                (e.velocityX / 1000) * DECELERATION_TIME_CONSTANT_MS,
-            ),
-            minScroll,
-          ),
-          maxScroll,
-        );
-        if (onScrollEndTarget) runOnJS(onScrollEndTarget)(restingScroll);
-        scrollX.value = withDecelerationTo(
-          currentScroll,
-          restingScroll,
-          endScroll,
-        );
-      } else {
-        scrollX.value = withDecay(
-          {
-            velocity: e.velocityX,
-            clamp: [minScroll, maxScroll],
-          },
-          endScroll,
-        );
+      // An unmeasured chart, or one whose data is briefly empty, has no x value to rest on.
+      if (!scrollRest || !Number.isFinite(restingScroll)) {
+        scrollX.value = isOverscrolled
+          ? withSpring(boundedScroll, springConfig, endScroll)
+          : withDecay({ velocity, clamp: [minScroll, maxScroll] }, endScroll);
+        return;
       }
+      if (success && onScrollEndTarget) {
+        runOnJS(onScrollEndTarget)(scrollRest.visibleXDomainAt(restingScroll));
+      }
+      scrollX.value = isOverscrolled
+        ? withSpring(restingScroll, springConfig, endScroll)
+        : withDecelerationTo(
+            currentScroll,
+            getRestingScroll,
+            velocity,
+            endScroll,
+          );
     });
 
   return panGesture;
