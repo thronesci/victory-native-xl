@@ -1,5 +1,5 @@
 import { type ComposedGesture, type GestureType } from "react-native-gesture-handler";
-import type { SkRect } from "@shopify/react-native-skia";
+import type { SkRect } from "react-native-skia";
 import { type SharedValue } from "react-native-reanimated";
 import * as React from "react";
 type GestureHandlerProps = {

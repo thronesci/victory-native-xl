@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PieChart = void 0;
 const React = __importStar(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const PieSlice_1 = require("./PieSlice");
 const innerRadius_1 = require("./utils/innerRadius");
 const PieSliceContext_1 = require("./contexts/PieSliceContext");

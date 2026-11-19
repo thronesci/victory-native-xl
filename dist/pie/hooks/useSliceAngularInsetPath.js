@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.useSliceAngularInsetPath = void 0;
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_1 = require("react");
 const radians_1 = require("../utils/radians");
 const useSliceAngularInsetPath = ({ angularInset, slice, }) => {

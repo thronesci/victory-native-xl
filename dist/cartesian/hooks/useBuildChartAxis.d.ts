@@ -1,5 +1,5 @@
 import React from "react";
-import type { Color } from "@shopify/react-native-skia";
+import type { Color } from "react-native-skia";
 import type { AxisProps, FrameInputProps, InputFields, NumericalFields, XAxisInputProps, XAxisPropsWithDefaults, YAxisInputProps, YAxisPropsWithDefaults } from "../../types";
 /**
  * This hook builds the chart axes + the surrounding frame based on either the new x, y, frame props, or via backwards compatibility for the older axisOptions props and the associated default values it had. The defaults for the former are the new XAxisDefaults, YAxisDefaults, and FrameDefaults, while the defaults for the latter come from the older CartesianAxisDefaultProps.
@@ -21,6 +21,6 @@ export declare const useBuildChartAxis: <RawData extends Record<string, unknown>
     } | {
         lineWidth: import("../../types").SidedNumber;
         lineColor: Color;
-        linePathEffect?: React.ReactElement<import("@shopify/react-native-skia").AnimatedProps<import("@shopify/react-native-skia").DashPathEffectProps, never>, string | React.JSXElementConstructor<any>>;
+        linePathEffect?: React.ReactElement<import("react-native-skia").AnimatedProps<import("react-native-skia").DashPathEffectProps, never>, string | React.JSXElementConstructor<any>>;
     };
 };

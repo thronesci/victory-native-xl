@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.useChartTransformState = void 0;
 const react_native_reanimated_1 = require("react-native-reanimated");
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const react_1 = require("react");
 const transform_1 = require("../../utils/transform");
 const useChartTransformState = (config) => {

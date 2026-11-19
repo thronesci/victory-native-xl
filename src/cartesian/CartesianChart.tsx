@@ -1,6 +1,6 @@
 import * as React from "react";
 import { type LayoutChangeEvent } from "react-native";
-import { Canvas, Group, useCanvasSize } from "@shopify/react-native-skia";
+import { Canvas, Group, useCanvasSize } from "react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import {
   type ComposedGesture,
@@ -169,7 +169,7 @@ function CartesianChartContent<
   );
 
   // new arch
-  const { ref, size } = useCanvasSize();
+  const { size, onLayout } = useCanvasSize();
   const [hasMeasuredLayoutSize, setHasMeasuredLayoutSize] =
     React.useState(false);
 
@@ -647,7 +647,7 @@ function CartesianChartContent<
 
   // Body of the chart.
   const body = (
-    <Canvas style={{ flex: 1 }} ref={ref}>
+    <Canvas style={{ flex: 1 }} onLayout={onLayout}>
       {YAxisComponents}
       {XAxisComponents}
       {FrameComponent}

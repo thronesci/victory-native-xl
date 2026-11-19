@@ -6,7 +6,7 @@ import {
   Picture,
   Skia,
   type SkFont,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import {
   isWorkletFunction,
   runOnJS,

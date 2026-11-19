@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet } from "react-native";
-import { Group, Line, Text, vec } from "@shopify/react-native-skia";
+import { Group, Line, Text, vec } from "react-native-skia";
 import { boundsToClip } from "../../utils/boundsToClip";
 import type {
   InputDatum,

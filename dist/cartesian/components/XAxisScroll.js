@@ -39,7 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.XAxisDefaults = exports.XAxis = exports.MemoizedXAxis = void 0;
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const boundsToClip_1 = require("../../utils/boundsToClip");
 const tickHelpers_1 = require("../../utils/tickHelpers");
 const react_native_reanimated_1 = require("react-native-reanimated");

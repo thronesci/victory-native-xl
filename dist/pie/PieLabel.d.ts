@@ -1,4 +1,4 @@
-import { type Color, type SkFont } from "@shopify/react-native-skia";
+import { type Color, type SkFont } from "react-native-skia";
 import React, { type ReactNode } from "react";
 type LabelPosition = {
     x: number;

@@ -50,7 +50,7 @@ vi.mock("react-native-reanimated", () => ({
     callback: (finished: boolean) => void,
   ): Animation => ({ toValue, callback }),
 }));
-vi.mock("@shopify/react-native-skia", () => ({}));
+vi.mock("react-native-skia", () => ({}));
 vi.mock("react-native-gesture-handler", () => ({
   Gesture: {
     Pan: () => {

@@ -4,7 +4,7 @@ import {
   type Color,
   type DashPathEffect,
   type SkFont,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import type { ZoomTransform } from "d3-zoom";
 import { type PanGesture } from "react-native-gesture-handler";
 

@@ -4,5 +4,5 @@ export declare const useBarGroupPaths: (points: PointsArray[], chartBounds: Char
     barWidth: number;
     groupWidth: number;
     gapWidth: number;
-    paths: import("@shopify/react-native-skia").SkPath[];
+    paths: import("react-native-skia").SkPath[];
 };

@@ -1,6 +1,6 @@
 import { type SharedValue } from "react-native-reanimated";
 import { type ScaleLinear } from "d3-scale";
-import { type Color, type DashPathEffect, type SkFont } from "@shopify/react-native-skia";
+import { type Color, type DashPathEffect, type SkFont } from "react-native-skia";
 import type { ZoomTransform } from "d3-zoom";
 import { type PanGesture } from "react-native-gesture-handler";
 export type PrimitiveViewWindow = {

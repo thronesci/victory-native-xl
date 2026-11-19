@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BarGraphLabels = void 0;
 const react_1 = __importDefault(require("react"));
-const react_native_skia_1 = require("@shopify/react-native-skia");
+const react_native_skia_1 = require("react-native-skia");
 const getFontGlyphWidth_1 = require("../../utils/getFontGlyphWidth");
 // Arbitrary offset so that the label is not touching the bar
 const LABEL_OFFSET_FROM_POSITION = 5;
