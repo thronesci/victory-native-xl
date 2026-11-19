@@ -147,7 +147,16 @@ export type AxisProps<
   ix?: InputFields<RawData>[XK][];
   ignoreClip?: boolean;
   labelXCenter?: boolean;
+  getXTicks?: GetXTicks;
 };
+
+/**
+ * A scroll chart's x ticks: a worklet the axis calls on the UI thread as it scrolls, with the x values of the stretch it
+ * draws, which returns the ascending ticks between them. The axis then costs only the ticks near the plot, however long
+ * the chart. Replaces `tickValues.x`, which such a chart leaves empty, so its domain comes from its data. Needs a worklet
+ * `formatXLabel`.
+ */
+export type GetXTicks = (from: number, to: number) => number[];
 
 // The default prop options we pass in
 export type AxisPropWithDefaults<
@@ -163,6 +172,7 @@ export type AxisPropWithDefaults<
   | "font"
   | "tickValues"
   | "isNumericalData"
+  | "getXTicks"
 >;
 // The optional remaining props afterwards
 export type OptionalAxisProps<
@@ -173,6 +183,7 @@ export type OptionalAxisProps<
   tickValues?: number[] | { x: number[]; y: number[] };
   font?: SkFont | null;
   secondaryXFont?: SkFont | null;
+  getXTicks?: GetXTicks;
   formatXLabel?: (
     label: InputFields<RawData>[XK],
   ) => string | { top: string; bottom: string };
